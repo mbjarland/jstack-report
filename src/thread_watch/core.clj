@@ -58,11 +58,12 @@
 
 
 (defn print-stack [options line-provider]
-  (let [tid (:tid options)
+  (let [tids (into #{} (split (:tid options) #","))
         stacks (parse-jstack-output (line-provider))
-        stack (reduce #(when (= (:tid %2) tid) (reduced %2)) nil stacks)]
-    (doseq [line (:lines stack)]
-      (println line))))
+        hits (filter #(tids (:tid %)) stacks)]
+    (doseq [stack hits]
+      (doseq [line (:lines stack)]
+        (println line)))))
 
 (defn -main [& args]
   (let [{:keys [options arguments errors summary]}
@@ -74,5 +75,5 @@
   (get-file-lines "dumps/stack_only_aux_target.txt"))
 
 (defn test-app []
-  (print-stack {:tid "0x000000005072d800"}
+  (print-stack {:tid "0x000000005072d800,0x000000005bac6000"}
              get-sample-lines))
