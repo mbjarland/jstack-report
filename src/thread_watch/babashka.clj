@@ -55,13 +55,13 @@
 
 (defn split-lines-by [pred lines]
   (reduce
-   (fn [res line]
-     (if (pred line)
-       (conj res [line])
-       (conj (if (not-empty res) (pop res) [])
-             (conj (or (peek res) []) line))))
-   []
-   lines))
+    (fn [res line]
+      (if (pred line)
+        (conj res [line])
+        (conj (if (not-empty res) (pop res) [])
+          (conj (or (peek res) []) line))))
+    []
+    lines))
 
 
 ;; the below two defs define a line based state machine to
@@ -131,15 +131,15 @@
 (defn next-state [state line]
   (let [transitions (state finite-state-machine)
         [new-state _] (keep
-                       (fn [[pattern state]]
-                         (cond
-                           (= :any pattern) state
-                           (and (= :empty pattern)
-                                (= (count line) 0)) state
-                           (and (string? pattern)
-                                (str/starts-with? line pattern)) state
-                           :else nil))
-                       (partition 2 transitions))]
+                        (fn [[pattern state]]
+                          (cond
+                            (= :any pattern) state
+                            (and (= :empty pattern)
+                              (= (count line) 0)) state
+                            (and (string? pattern)
+                              (str/starts-with? line pattern)) state
+                            :else nil))
+                        (partition 2 transitions))]
     (or new-state :undefined)))
 
 (defn first-line-prop
@@ -182,18 +182,18 @@
    Example line: '\"RMI TCP Connection(idle)\" daemon prio=10 tid=0x0000000050977800 nid=0x34d waiting on condition [0x00002b7b25bab000]'"
   (let [prop (partial first-line-prop line)]
     (assoc-if
-     {:NAME      (thread-name line)
-      :id        (id line)
-      :daemon?   (daemon? line)
-      :prio      (some-> (prop "prio") Integer/parseInt)
-      :os-prio   (some-> (prop "os_prio") Integer/parseInt)
-      :cpu       (prop "cpu")
-      :elapsed   (prop "elapsed")
-      :tid       (prop "tid")
-      :nid       (prop "nid")
-      :currently (currently line)
-      :lines     [line]
-      :trace     []})))
+      {:NAME      (thread-name line)
+       :id        (id line)
+       :daemon?   (daemon? line)
+       :prio      (some-> (prop "prio") Integer/parseInt)
+       :os-prio   (some-> (prop "os_prio") Integer/parseInt)
+       :cpu       (prop "cpu")
+       :elapsed   (prop "elapsed")
+       :tid       (prop "tid")
+       :nid       (prop "nid")
+       :currently (currently line)
+       :lines     [line]
+       :trace     []})))
 
 (defn parse-block-second-line [rec line]
   "parses the second line of a thread block. The first argument is a map
@@ -224,26 +224,26 @@
 ;- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)
 ;- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)
 (comment
- ;; testing the parsing of various
- (map (fn [line]
-        (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
-          {:oid oid :class class :class-for class-for}))
-      ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
-       "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
-       "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
-       "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
-       "\t- waiting on <no object reference available>"
-       "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
-       "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
- )
+  ;; testing the parsing of various
+  (map (fn [line]
+         (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
+           {:oid oid :class class :class-for class-for}))
+    ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
+     "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
+     "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
+     "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
+     "\t- waiting on <no object reference available>"
+     "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
+     "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
+  )
 (defn parse-dashed-line
   "parse one of the '\t- xxx' lines in the thread block stack trace"
   [m state line]
   (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
     (update m :trace conj (assoc-if (state dash-types)
-                                    {:oid       oid
-                                     :class     class
-                                     :class-for class-for}))))
+                            {:oid       oid
+                             :class     class
+                             :class-for class-for}))))
 (defn add-locked [rec]
   (update rec :locked (fnil conj #{}) (-> rec :trace last :oid)))
 
@@ -252,20 +252,20 @@
 
 (defn parse-block-line [rec state line]
   (case state
-        :block-second (parse-block-second-line rec line)
-        :trace-element (parse-trace-element-line rec line)
-        ;;:owned-locks-start (update rec :lines conj "")
-        :locked (parse-dashed-line rec state line)
-        (:waiting-concurrent
-         :waiting-notify
-         :waiting-synchronized
-         :waiting-re-lock) (parse-dashed-line rec state line)
-        rec))
+    :block-second (parse-block-second-line rec line)
+    :trace-element (parse-trace-element-line rec line)
+    ;;:owned-locks-start (update rec :lines conj "")
+    :locked (parse-dashed-line rec state line)
+    (:waiting-concurrent
+     :waiting-notify
+     :waiting-synchronized
+     :waiting-re-lock) (parse-dashed-line rec state line)
+    rec))
 
 (defn parse-and-append [rec state line]
   (-> rec
-      (parse-block-line state line)
-      (update :lines conj line)))
+    (parse-block-line state line)
+    (update :lines conj line)))
 
 ;(:owned-locks-start
 ; :owned-lock
@@ -274,21 +274,24 @@
 
 (defn parse-line [m state line line-#]
   (case state
-        :prelude (update m :prelude conj line)
-        :epilogue (update m :epilogue conj line)
-        :undefined (throw (ex-info "Encountered line with no defined state transition"
-                                   {:line#         line-#
-                                    :line          line
-                                    :current-state state}))
-        :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
-        ;; default
-        (update-in m
-                   [:threads (-> m :threads count dec)]     ;; update last thread in vec
-                   #(parse-and-append % state line))))
+    :prelude (update m :prelude conj line)
+    :epilogue (update m :epilogue conj line)
+    :undefined (throw (ex-info "Encountered line with no defined state transition"
+                        {:line#         line-#
+                         :line          line
+                         :current-state state}))
+    :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
+    ;; default
+    (update-in m
+      [:threads (-> m :threads count dec)]                  ;; update last thread in vec
+      #(parse-and-append % state line))))
 
-;; main entry point, parses jstack output lines
-;; into clojure data structure
-(defn parse-jstack-lines [lines]
+(defn parse-jstack-lines
+  "main parsing method of this namespace, parses out the base
+  structure and details from the jstack lines. The dump function
+  will call this and decorate in a few extra properties for post
+  processing"
+  [lines]
   (loop [m          {:prelude [] :threads [] :epilogue []}
          prev-state :start
          line-#     1
@@ -296,9 +299,9 @@
     (let [state (next-state prev-state line)]
       (if (not= state :end)
         (recur (parse-line m state line line-#)
-               state
-               (inc line-#)
-               xs)
+          state
+          (inc line-#)
+          xs)
         m))))
 
 (defn remove-waiting-on-lock [locks t]
@@ -317,17 +320,17 @@
 
 (defn extract-locks-and-wait [rec]
   (reduce
-   (fn [[locks wait-oid] t]
-     (cond
-       (and locks
-            (= (:wait-type t) :notify)) [(remove-waiting-on-lock locks t) wait-oid]
-       (#{:concurrent
-          :synchronized
-          :re-lock} (:wait-type t)) [locks {(:oid t) (:class t)}]
-       (= (:type t) :locked) [(merge locks {(:oid t) (:class t)}) wait-oid]
-       :else [locks wait-oid]))
-   [nil nil]
-   (-> rec :trace reverse)))
+    (fn [[locks wait-oid] t]
+      (cond
+        (and locks
+          (= (:wait-type t) :notify)) [(remove-waiting-on-lock locks t) wait-oid]
+        (#{:concurrent
+           :synchronized
+           :re-lock} (:wait-type t)) [locks {(:oid t) (:class t)}]
+        (= (:type t) :locked) [(merge locks {(:oid t) (:class t)}) wait-oid]
+        :else [locks wait-oid]))
+    [nil nil]
+    (-> rec :trace reverse)))
 
 (defn reconcile-locks [rec]
   (let [[locks waiting-on] (extract-locks-and-wait rec)]
@@ -339,28 +342,139 @@
   in clojure data format"
   [lines]
   (-> (parse-jstack-lines lines)
-      (update :threads #(map reconcile-locks %))))
+    (update :threads #(map reconcile-locks %))))
+
+(defn threads-by-tid
+  "given a dump, returns a map TID -> thread where thread
+  is the map structure representing a thread in the dump"
+  [dump]
+  (reduce
+    (fn [a t] (assoc a (:tid t) t))
+    (sorted-map)
+    (:threads dump)))
+
+(defn threads-by-name
+  "given a dump, returns a map 'thread name' -> thread where thread
+  is the map structure representing a thread in the dump"
+  [dump]
+  (reduce
+    (fn [a t] (assoc a (:NAME t) t))
+    (sorted-map)
+    (:threads dump)))
+
+(defn threads-by-lock-oid
+  "given a dump, returns a map 'object id' -> thread where
+  thread is the map structure representing the thread in the dump. Only
+  threads holding locks will be present in the returned map"
+  [dump]
+  (reduce
+    (fn [a t]
+      (if (:locked t)
+        (reduce-kv
+          (fn [a2 oid _] (assoc a2 oid t))
+          a
+          (:locked t))
+        a))
+    {}
+    (:threads dump)))
+
+(defn transitive-path [waiters t]
+  (loop [tid (:tid t) p [tid]]
+    (let [n (get waiters tid)]
+      (if (not n)
+        (reverse p)
+        (recur n (conj p n))))))
+
+;(defn add-transitive-lock-node [m t]
+;  (let [p (transitive-oid-path m t)]
+;    (cond-> m
+;      (:waiting-on t) (assoc-in p {:tid (:tid t) :NAME {:NAME t}})
+;      (:locked t) (update-in p (fn [_] (zipmap (keys (:locked t)) (repeat {})))))))
+
+(defn waiting-on-tids
+  "returns a map {tidA tidB ...} where thread A is waiting
+  on a lock held by thread B"
+  [dump lockers]
+  (reduce
+    (fn [a t]
+      (let [waiting-on-oid (first (keys (:waiting-on t)))
+            waiting-on-tid (:tid (get lockers waiting-on-oid))]
+        (if waiting-on-tid
+          (assoc a (:tid t) waiting-on-tid)
+          a)))
+    {}
+    (filter :waiting-on (:threads dump))))
+
+(defn transitive-lock-graph [dump]
+  (let [lockers (threads-by-lock-oid dump)
+        waiters (waiting-on-tids dump lockers)]
+
+    (reduce
+      (fn [a t]
+        (assoc-in a (transitive-path waiters t) nil))
+      {}
+      (filter :waiting-on (:threads dump)))))
+
+
+; waiters
+;
+; {tidB tidA         ;; B is waiting on lock held by A
+;  tidC tidB
+;  tidD tidB
+;  tidE tidB
+;  tidF tidC}
+;
+;  tidB #{tidC          ;; tidB - holds ContentItem
+;         tidD
+;         tidE}
+;  tidC #{tidF}}
+
+; {tidA #{tidB}         ;; tidA - holds transaction
+;  tidB #{tidC          ;; tidB - holds ContentItem
+;         tidD
+;         tidE}
+;  tidC #{tidF}}
+; ->
+; {tidA {tidB {tidC {tidF nil}
+;              tidD nil
+;              tidE nil}}}
+;
+; root node: is not waiting on anything (not in any set)
+; report ->
+; tidA locked X - 5 transitive threads waiting
+;   tidB waiting on X, locked Y - 4 transitive threads waiting
+;     tidC waiting on Y, locked Z - 1 transitive threads waiting
+;     tidD waiting on Y
+;     tidE waiting on Y
+; {oidA {tid #{oidB oidC}}   ;; oidA - transaction
+;  oidB {tidB #{}            ;; oidB - ContentItem
+;        tidC #{}
+;        tidD #{}}
+;  oidC {tidE #{}}
+; t:
+;   {:locked {oid class
+;             oid class}
+;    :waiting-on oid}
+;
+;  {oidA {oidB {oidC {:tid x :NAME y :}
+;               oidD {:tid x :NAME y :}}}}
+;  ->
+;  {oidA {oidB {oidC {:tid x :NAME y :}
+;               oidD {oidE {:tid x :NAME y :}}}}}
+;
+;  {oidA {:tid x :NAME y}}
+;  ->
+;  {oidA {:tid x :NAME y}
+;   oidB {:tid x :NAME y}}
+;
+;
+;
+
+
+
+
+
+
 
 (defn thread-by-name [dump name]
   (first (filter #(= (:name %) name) (-> dump :threads))))
-
-; types
-;- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)
-;- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)
-;- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)
-;- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)
-;- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)
-;- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)
-
-; the "synchronized(x) { x.wait() }" pattern leads to a sequence of
-; '- waiting on x' (x.wait)
-; ...
-; '- locked x' (synchronized)
-; in the trace where the thread is now placed in the wait set for object x.
-;
-;; [{:type :trace :class "atg.vfs.VirtualFileImpl" :method "getChild" :file "VirtualFileImpl.java" :line 177}
-;;  {:type :locked :oid "0x000000064906aac8" :class "java.util.zip.ZipFile"}
-;;  {:type :waiting
-;;
-;; "parking to wait for" "waiting to lock" "waiting on" thread dump
-
