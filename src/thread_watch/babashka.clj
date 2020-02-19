@@ -440,23 +440,27 @@
 
 (defn render-tree
   ([key val]
-   (render-tree str compare key val))
-  ([render-fn key-compare-fn key val]
+   (render-tree str compare nil key val))
+  ([render-fn key-compare-fn parent key val]
    (let [I-branch "│   "
          T-branch "├── "
          L-branch "└── "
-         spacer   "    "]
-     (cons (render-fn key val)
+         spacer   "    "
+         val      (into (sorted-map-by key-compare-fn) val)
+         [label-first label-last] [(render-fn parent key val) "│ blocking 87343 threads"]
+         header   (if (< 0 (count val)) [label-first label-last] [label-first])]
+     (prn :key key :count (count val))
+     (concat header
        (mapcat
          (fn [[c-key c-val] index]
            (prn :c-val c-val)
-           (let [subtree      (render-tree render-fn key-compare-fn c-key c-val)
+           (let [subtree      (render-tree render-fn key-compare-fn val c-key c-val)
                  last?        (= index (dec (count val)))
                  prefix-first (if last? L-branch T-branch)
                  prefix-rest  (if last? spacer I-branch)]
              (cons (str prefix-first (first subtree))
                (map #(str prefix-rest %) (next subtree)))))
-         (into (sorted-map-by key-compare-fn) val)
+         val
          (range))))))
 
 (defn keys-in [m]
@@ -471,97 +475,114 @@
         m))
     []))
 
-(defn display [threads-by-tid tid m]
-  (let [t        (get threads-by-tid tid)
-        blocking (count (distinct (flatten (keys-in m))))]
-    (cond-> (:NAME t)
-      (pos? blocking) (str " - blocks " blocking " threads")
-      (:waiting-on t) (str " - waiting on " (str/join " " (flatten (vec (:waiting-on t))))))))
+(defn display [threads-by-tid parent tid m]
+  (let [t           (get threads-by-tid tid)
+        block-count (count (distinct (flatten (keys-in m))))
+        ks          (keys parent)]
+
+    (prn :parent parent :tid tid :m m)
+    (cond-> (str (:tid t) " " (:NAME t))
+      (pos? block-count) (str " - blocks " block-count " threads"))))
+;(:waiting-on t) (str " - waiting on " (str/join " " (flatten (vec (:waiting-on t))))))))
 
 (defn render-lock-graph
   [dump]
   (let [graph          (transitive-lock-graph dump)
         threads-by-tid (threads-by-ti dump)
         render-fn      (partial display threads-by-tid)]
-    (mapcat (fn [[k v]] (render-tree render-fn compare k v)) graph)))
-; "ajp|024721.012|cid=xjWPV4WJhU|rid=MJm3lyXjlo|/us/browse/_/N-1z0tidcZ1z0vrsaZ1z11u3u" - blocks 87 threads, locked 0x00000007231f7420 GSATransaction
-; └── "Thread-5987" - blocks 86 threads, waiting on 0x00000007231f7420, locked 0x00000006ee7545b0 GSAContentItem
-;     ├── "ajp|025730.050|cid=2CCmLyEivf|rid=rWjXA7jKAT|/us/" - waiting on 0x00000006ee7545b0
-;     ├── "ajp|025704.641|cid=Y0KzRJi1Qy|rid=WFtQ5Je7E4|/us/campaign/thank-you.jsp" - waiting on 0x00000006ee7545b0
-;     └── "ajp|025725.745|cid=COS56IPjv2|rid=FxLDDpMVGu|ever-handles/productDetail/sink-faucets/870355.htm" - waiting on 0x00000006ee7545b0
-;
-;   type tree =
-;       | T of string * tree list
-;
-;   let prefMid = seq { yield "├─"; while true do yield "│ " }
-;   let prefEnd = seq { yield "└─"; while true do yield "  " }
-;   let prefNone = seq { while true do yield "" }
-;
-;   let c2 x y = Seq.map2 (fun u v -> String.concat "" [u; v]) x y
-;
-;   let rec visualize (T(label, children)) pre =
-;       seq {
-;           yield (Seq.head pre) + label
-;           if children <> [] then
-;               let preRest = Seq.skip 1 pre
-;               let last = Seq.last (List.toSeq children)
-;               for e in children do
-;                   if e = last then yield! visualize e (c2 preRest prefEnd)
-;                   else yield! visualize e (c2 preRest prefMid)
-;       }
-;
-;   let example =
-;       T ("root",
-;               [T ("a",
-;                       [T ("a1",
-;                               [T ("a11", []);
-;                               T ("a12", []) ]) ]);
-;               T ("b",
-;                       [T ("b1", []) ]) ])
-;
-;   visualize example prefNone
-;   |> Seq.iter (printfn "%s")
-;   Output:
-;   root
-;   ├─a
-;   │ └─a1
-;   │   ├─a11
-;   │   └─a12
-;   └─b
-;     └─b1
+    (mapcat (fn [[k v]] (render-tree render-fn compare nil k v)) graph)))
 
-
-(defn ascii-tree
-  "given a map m
-      {a {b {c nil}
-          d nil}}
-  and a function which can take a key a, b, c etc and produce a display
-  string for a node, produces a ascii tree similar to the linux tree command.
-  The example map given above would produce:
-  (leaf-fn a)
-  ├── (leaf-fn b)
-  │   └── (leaf-fn c)
-  └── (leaf-fn d)"
-  [m leaf-fn]
-  (let [pref-mid  (lazy-seq (cons "├─" (repeat "│ ")))
-        pref-end  (lazy-seq (cons "└─" (repeat "  ")))
-        pref-none (repeat "")
-        c2        (fn [xs ys] (map #(str %1 %2) xs ys))]
-    (loop [r [] m2 m pre pref-none]
-
-      (conj r (str (first pre) (if (empty? r) "root" (leaf-fn))))
-
-      )
-
-    ))
-
-
-(defn transitive-lock-report
-
-  [dump]
-  (let [graph (transitive-lock-graph dump)]
-    ))
-
+;   ajp|024721.012|cid=xjWPV4WJhU|rid=MJm3lyXjlo|/us/browse/_/N-1z0tidcZ1z0vrsaZ1z11u3u
+;   │ locked 0x00000007231f7420 atg.adapter.gsa.GSATransaction - blocks 87 threads
+;   └── Thread-5987
+;       │ locked 0x00000006ee7545b0 atg.adapter.gsa.GSAContentItem - blocks 80 threads
+;       ├── ajp|025619.779|cid=UtRSuVPjI8|rid=a7jHk8kh3H|/us/
+;       ├── ajp|025703.514|cid=LiInjTCnXE|rid=dfKwrxHzUW|ts-bathroom-fittings-bathroom-sink-drains/_/N-2d7t
+;       ├── ajp|025707.725|cid=FTeVSVMb40|rid=M66beMMs29|/us/
+;       ├── ajp|025715.507|cid=1zcPGpQxly|rid=wvvYMCYh2N|/us/browse/bathroom-toilets/_/N-2569
+;       ├── ajp|025555.113|cid=Ydq3HfKJKj|rid=b2DXhywwKO|/us/
+;       ├── ajp|025703.338|cid=b1LPPfx3uf|rid=yqLu01auxz|/us/s
+;       ├── ajp|025702.854|cid=JrUBWAcx1V|rid=CYLdJdUc4s|us/Material-Color-Palette/article/CNT120600001.htm
+;       ├── ajp|025657.528|cid=Rmpa3EX6IE|rid=BGqVqTe2ri|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025737.334|cid=PqObJigXeK|rid=u0cOnb3zkD|om-commercial-bathroom-commercial-toilets/_/N-2d82
+;       ├── ajp|025657.583|cid=SxUfpRVBUL|rid=RLvCi5dwCX|/us/kitchen-sinks/article/CNT126100002.htm
+;       ├── ajp|025626.002|cid=Q5evl9qwWL|rid=NJ1rvm3aWI|-tall-apron/productDetail/kitchen-sinks/428755.htm
+;       ├── ajp|025612.046|cid=M4ErKAOity|rid=kddH13R5YA|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
+;       ├── ajp|025557.455|cid=FTeVSVMb40|rid=1gDvouyqL7|/us/
+;       ├── ajp|025653.255|cid=9ZX556ESIe|rid=o26wAnw7lU|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025655.646|cid=BdOSZ1pmnf|rid=Zynj5g01pl|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
+;       ├── ajp|025729.130|cid=9ZX556ESIe|rid=1YKLGSgxto|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025547.274|cid=SxUfpRVBUL|rid=KBTh7xFovd|/us/kitchen-sinks/article/CNT126100002.htm
+;       ├── ajp|025603.985|cid=JrUBWAcx1V|rid=nTQ7sYsn2d|us/Material-Color-Palette/article/CNT120600001.htm
+;       ├── ajp|025605.237|cid=NWFSK68BxY|rid=wqYniIDDw6|/us/browse/bathroom-toilets/_/N-2569
+;       ├── ajp|025552.423|cid=C3f5Vpi42l|rid=t0wmrGxhDz|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
+;       ├── ajp|025705.357|cid=eXg2LCfLN2|rid=Pxu0PNkbAl|/us/
+;       ├── ajp|025603.742|cid=n0IxwLJC1w|rid=SO1EJg3Mpr|/us/browse/_/N-1z11tv4Z1z0uklg
+;       ├── ajp|025653.263|cid=EoPNK5hOwR|rid=KbDLWXwDQg|us/browse/bathroom-bathing/_/N-255vZ5jZ5iZ5kZ8dZ8g
+;       ├── ajp|025634.418|cid=MpB1cjLzsO|rid=xhW0nhtZAB|er-Professional-Toolbox/remodeler/CNT122800001.htm
+;       ├── ajp|025722.316|cid=xGaLlmK5Up|rid=jLTuEOJ8LS|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
+;       ├── ajp|025712.120|cid=9ixRiUsL6p|rid=sVosrDzPjI|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
+;       ├── ajp|025730.816|cid=dA7f1aNVPK|rid=pkiA2B4Xqg|/us/browse/kitchen-bar-sinks/_/N-25b3Z1z11twx
+;       ├── ajp|025736.271|cid=GyclaKJQEM|rid=KOM1TpdbFy|-tall-apron/productDetail/kitchen-sinks/428755.htm
+;       ├── ajp|025618.865|cid=9ZX556ESIe|rid=sq741RjezR|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025706.973|cid=DDqO6T112n|rid=8NvEaygRdb|/us/s
+;       ├── ajp|025552.059|cid=JrUBWAcx1V|rid=hf7Syq0mE7|us/Material-Color-Palette/article/CNT120600001.htm
+;       ├── ajp|025628.389|cid=bbG8XfqPMX|rid=M53ESsveZn|/us/
+;       ├── ajp|025733.650|cid=Bb80Ceucwi|rid=5kCdD10jPM|/us/
+;       ├── ajp|025545.375|cid=4ktrUGce5M|rid=tLssDVEHHz|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
+;       ├── ajp|025702.698|cid=owxWMjuGvY|rid=rclSvWAm9l|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
+;       ├── ajp|025623.421|cid=0MatPyHtQz|rid=OWY8sxmvNA|/us/
+;       ├── ajp|025714.270|cid=JrUBWAcx1V|rid=LNBPc21wQT|us/Material-Color-Palette/article/CNT120600001.htm
+;       ├── ajp|025641.030|cid=JrUBWAcx1V|rid=vC5mHlxT7S|er-Professional-Toolbox/remodeler/CNT122800001.htm
+;       ├── ajp|025542.985|cid=9ZX556ESIe|rid=dQ8wdRsN7p|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025701.209|cid=4nfgW0ZBmV|rid=ihss6DIGPU|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025714.002|cid=3HmGwz0rpm|rid=PfS1G43qUI|/us/browse/_/N-1z11tv4Z1z0uklg
+;       ├── ajp|025554.370|cid=Y0KzRJi1Qy|rid=3raSjiiSse|/us/campaign/thank-you.jsp
+;       ├── ajp|025716.720|cid=HffBYyNm6k|rid=VfQON438Iy|/nonprdcontent/listDetail.jsp
+;       ├── ajp|025725.745|cid=COS56IPjv2|rid=FxLDDpMVGu|ever-handles/productDetail/sink-faucets/870355.htm
+;       ├── ajp|025704.641|cid=Y0KzRJi1Qy|rid=WFtQ5Je7E4|/us/campaign/thank-you.jsp
+;       ├── ajp|025730.050|cid=2CCmLyEivf|rid=rWjXA7jKAT|/us/
+;       ├── ajp|025738.558|cid=4ABheH03Qk|rid=PWXNHfyPiE|/us/catalog/productDetails.jsp
+;       ├── ajp|025738.665|cid=SuH69Z2uth|rid=U7zpAjkqMc|/us/
+;       ├── ajp|025742.600|cid=nVLO1dhqk5|rid=TfVNvGFwiQ|/us/s
+;       ├── ajp|025743.027|cid=9ZX556ESIe|rid=sIKaX1oOCL|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025743.248|cid=9ZX556ESIe|rid=8ftFJpWAkL|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025744.692|cid=OC9WfoQiWk|rid=aorxFi7oPh|er-Professional-Toolbox/remodeler/CNT122800001.htm
+;       ├── ajp|025745.712|cid=XGrX6PeLCL|rid=Szi0YOAfTJ|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
+;       ├── ajp|025747.157|cid=koG9JQGp0s|rid=Y0mydldbCs|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025747.247|cid=SxUfpRVBUL|rid=ujdoCGt7jP|/us/kitchen-sinks/article/CNT126100002.htm
+;       ├── ajp|025748.916|cid=yrfZcpZXrY|rid=2YBMwdQqrr|/us/s/_/N-2e8d
+;       ├── ajp|025751.304|cid=JrUBWAcx1V|rid=M9r6TKBLyO|er-Professional-Toolbox/remodeler/CNT122800001.htm
+;       ├── ajp|025751.991|cid=g3oG0K0vXK|rid=HysJUeoaNw|/us/
+;       ├── ajp|025752.364|cid=hVZzo1ES2c|rid=tbvODJvmtn|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
+;       ├── ajp|025754.363|cid=Y0KzRJi1Qy|rid=ZnhRHWHvfV|/us/campaign/thank-you.jsp
+;       ├── ajp|025757.094|cid=iniY4YIZNG|rid=XHCuZ5LHzv|/us/
+;       ├── ajp|025757.128|cid=vwDw59z3cO|rid=CV5oTsyLAk|/us/
+;       ├── ajp|025803.222|cid=yeLrjqa0SE|rid=gD0cfjAQcf|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025803.571|cid=08uKplGRn7|rid=kAHIRnC07x|us/browse/bathroom-bathing/_/N-255vZ5jZ5iZ5kZ8dZ8g
+;       ├── ajp|025805.458|cid=xuFZ9SRj56|rid=jMNLwOs2zg|/us/catalog/productDetails.jsp
+;       ├── ajp|025807.756|cid=0pwQJsj8mb|rid=wNAwENUjqM|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025811.457|cid=EpUNWoRlFl|rid=gqtscqTrqR|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025813.605|cid=FSBkyRNbxq|rid=cgWgFeU4Hk|/us/s
+;       ├── ajp|025813.785|cid=xDfB5XVyCQ|rid=7N7GDtGnsY|ts-bathroom-fittings-bathroom-sink-drains/_/N-2d7t
+;       ├── ajp|025817.247|cid=88n6R2mcaF|rid=plOnnF1MaL|/us/s
+;       ├── ajp|025822.392|cid=9Oq6hxSRfi|rid=9EueUPmp2j|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
+;       ├── ajp|025826.980|cid=Qyv8UD7qCN|rid=zrkcDGuOxR|/nonprdcontent/listDetail.jsp
+;       ├── ajp|025835.997|cid=JeJc6odKNw|rid=8KQlyOTikR|ever-handles/productDetail/sink-faucets/870355.htm
+;       ├── ajp|025841.067|cid=EzqvXWbuDT|rid=zOLwfNWQv6|/us/browse/kitchen-bar-sinks/_/N-25b3Z1z11twx
+;       ├── ajp|025847.590|cid=cDjhOBYzaA|rid=dhaZ5GOHv0|om-commercial-bathroom-commercial-toilets/_/N-2d82
+;       ├── ajp|025848.832|cid=siLXmuTOg9|rid=u0EvTbQqrz|/us/catalog/productDetails.jsp
+;       ├── ajp|025852.865|cid=nVLO1dhqk5|rid=20yI8Yz4bL|/us/s
+;       ├── ajp|025853.294|cid=9ZX556ESIe|rid=yw3aZWo0Dg|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025853.531|cid=9ZX556ESIe|rid=p2wjX6lMov|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
+;       ├── ajp|025855.981|cid=UzGx8MZ8KA|rid=UssPYhSMSt|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
+;       │ locked 0x00000006ee75233 atg.adapter.gsa.GSAContentItem - blocks 6 threads
+;       ├── ajp|025857.424|cid=PZUgb2H69e|rid=PuP0GuenCb|freestanding-tub/productDetail/bathing/1284618.htm
+;       ├── ajp|025857.535|cid=SxUfpRVBUL|rid=aMNIWnYrh5|/us/kitchen-sinks/article/CNT126100002.htm
+;       ├── ajp|025859.197|cid=IGG4852K1n|rid=yyXghBlh17|/us/s/_/N-2e8d
+;       ├── ajp|025902.263|cid=wPxCAZF6fc|rid=WE3Wf25JdL|/us/
+;       ├── ajp|025902.625|cid=KzAtbwZLOP|rid=yuzoFS4ZUq|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
+;       └── ajp|025904.633|cid=Y0KzRJi1Qy|rid=TaRNpspeQv|/us/campaign/thank-you.jsp"
 
 
 ; waiters
