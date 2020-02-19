@@ -385,8 +385,8 @@
    (:threads dump)))
 
 (defn waiters-by-tid
-  "returns a map {tidA tidB ...} where thread A is waiting
-  on a lock held by thread B. The argument dump is a map as
+  "returns a map {tidA {:tid tidB :oid oidB} ...} where thread A is waiting
+  on a lock on object oidB held by thread tidB. The argument dump is a map as
   returned by the dump function"
   [dump]
   (let [lockers (lockers-by-oid dump)]
@@ -395,9 +395,9 @@
        (let [waiting-on-oid (-> t :waiting-on :oid)
              waiting-on-tid (:tid (get lockers waiting-on-oid))]
          (if waiting-on-tid
-           (assoc a (:tid t) waiting-on-tid)
+           (assoc a (:tid t) {:tid waiting-on-tid :oid waiting-on-oid})
            a)))
-     {}
+     (sorted-map)
      (filter :waiting-on (:threads dump)))))
 
 (defn transitive-path
@@ -405,18 +405,19 @@
   t (tidC), returns a path [tidA tidB tidC] where thread C is waiting
   for a lock held by thread B, thread B is waiting for a lock
   held by thread A etc exhaustively until the chain completes"
-  [waiters t]
-  (loop [tid (:tid t) p [tid]]
-    (let [locker-tid (get waiters tid)]
-      (if (not locker-tid)
+  [waiters lockers t]
+  (let [first-oid (first (keep (fn [[tidA m]] (when (= (:tid t) (:tid m)) (:oid m))) waiters))]
+  (loop [tid (:tid t) p [{:tid tid :oid first-oid}]]
+    (let [locker (get waiters tid)]
+      (if (not locker)
         (reverse p)
-        (recur locker-tid (conj p locker-tid))))))
+        (recur (:tid locker) (conj p locker)))))))
 
 (defn graph-tid-comparator
   [threads-by-tid a b]
   ;(prn :comparing a :to b)
-  (let [ta        (get threads-by-tid a)
-        tb        (get threads-by-tid b)
+  (let [ta        (get threads-by-tid (:tid a))
+        tb        (get threads-by-tid (:tid b))
         ;_  (prn :ta ta)
         ;_  (prn :tb tb)
         a-oid     (-> ta :waiting-on :oid)
@@ -436,17 +437,20 @@
   wait for one oid"
   [dump]
   (let [threads-by-tid (threads-by-tid dump)
+        lockers        (lockers-by-oid dump)
         waiters        (waiters-by-tid dump)
         threads        (filter :waiting-on (:threads dump))
-        paths          (map (partial transitive-path waiters) threads)
+        paths          (map (partial transitive-path waiters lockers) threads)
+
         tid-comp       (partial graph-tid-comparator threads-by-tid)]
     (reduce
      (fn [a p]
+       (prn :path p)
        (if (< 1 (count p))
-         (assoc-in-by tid-comp a p nil)
+         (assoc-in a p nil)
          a))
-     (sorted-map-by tid-comp)
-     (sort-by count paths))))
+     {}
+     (reverse (sort-by count paths)))))
 
 (defn render-tree
   ([key val]
