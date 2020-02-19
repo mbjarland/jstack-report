@@ -127,15 +127,15 @@
 (defn next-state [state line]
   (let [transitions (state finite-state-machine)
         [new-state _] (keep
-                       (fn [[pattern state]]
-                         (cond
-                           (= :any pattern) state
-                           (and (= :empty pattern)
-                                (= (count line) 0)) state
-                           (and (string? pattern)
-                                (str/starts-with? line pattern)) state
-                           :else nil))
-                       (partition 2 transitions))]
+                        (fn [[pattern state]]
+                          (cond
+                            (= :any pattern) state
+                            (and (= :empty pattern)
+                              (= (count line) 0)) state
+                            (and (string? pattern)
+                              (str/starts-with? line pattern)) state
+                            :else nil))
+                        (partition 2 transitions))]
     (or new-state :undefined)))
 
 (defn first-line-prop
@@ -178,18 +178,18 @@
    Example line: '\"RMI TCP Connection(idle)\" daemon prio=10 tid=0x0000000050977800 nid=0x34d waiting on condition [0x00002b7b25bab000]'"
   (let [prop (partial first-line-prop line)]
     (assoc-if
-     {:NAME      (thread-name line)
-      :id        (id line)
-      :daemon?   (daemon? line)
-      :prio      (some-> (prop "prio") Integer/parseInt)
-      :os-prio   (some-> (prop "os_prio") Integer/parseInt)
-      :cpu       (prop "cpu")
-      :elapsed   (prop "elapsed")
-      :tid       (prop "tid")
-      :nid       (prop "nid")
-      :currently (currently line)
-      :lines     [line]
-      :trace     []})))
+      {:NAME      (thread-name line)
+       :id        (id line)
+       :daemon?   (daemon? line)
+       :prio      (some-> (prop "prio") Integer/parseInt)
+       :os-prio   (some-> (prop "os_prio") Integer/parseInt)
+       :cpu       (prop "cpu")
+       :elapsed   (prop "elapsed")
+       :tid       (prop "tid")
+       :nid       (prop "nid")
+       :currently (currently line)
+       :lines     [line]
+       :trace     []})))
 
 (defn parse-block-second-line [rec line]
   "parses the second line of a thread block. The first argument is a map
@@ -220,26 +220,26 @@
 ;- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)
 ;- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)
 (comment
- ;; testing the parsing of various
- (map (fn [line]
-        (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
-          {:oid oid :class class :class-for class-for}))
-      ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
-       "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
-       "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
-       "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
-       "\t- waiting on <no object reference available>"
-       "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
-       "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
- )
+  ;; testing the parsing of various
+  (map (fn [line]
+         (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
+           {:oid oid :class class :class-for class-for}))
+    ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
+     "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
+     "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
+     "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
+     "\t- waiting on <no object reference available>"
+     "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
+     "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
+  )
 (defn parse-dashed-line
   "parse one of the '\t- xxx' lines in the thread block stack trace"
   [m state line]
   (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
     (update m :trace conj (assoc-if (state dash-types)
-                                    {:oid       oid
-                                     :class     class
-                                     :class-for class-for}))))
+                            {:oid       oid
+                             :class     class
+                             :class-for class-for}))))
 (defn add-locked [rec]
   (update rec :locked (fnil conj #{}) (-> rec :trace last :oid)))
 
@@ -248,20 +248,20 @@
 
 (defn parse-block-line [rec state line]
   (case state
-        :block-second (parse-block-second-line rec line)
-        :trace-element (parse-trace-element-line rec line)
-        ;;:owned-locks-start (update rec :lines conj "")
-        :locked (parse-dashed-line rec state line)
-        (:waiting-concurrent
-         :waiting-notify
-         :waiting-synchronized
-         :waiting-re-lock) (parse-dashed-line rec state line)
-        rec))
+    :block-second (parse-block-second-line rec line)
+    :trace-element (parse-trace-element-line rec line)
+    ;;:owned-locks-start (update rec :lines conj "")
+    :locked (parse-dashed-line rec state line)
+    (:waiting-concurrent
+     :waiting-notify
+     :waiting-synchronized
+     :waiting-re-lock) (parse-dashed-line rec state line)
+    rec))
 
 (defn parse-and-append [rec state line]
   (-> rec
-      (parse-block-line state line)
-      (update :lines conj line)))
+    (parse-block-line state line)
+    (update :lines conj line)))
 
 ;(:owned-locks-start
 ; :owned-lock
@@ -270,17 +270,17 @@
 
 (defn parse-line [m state line line-#]
   (case state
-        :prelude (update m :prelude conj line)
-        :epilogue (update m :epilogue conj line)
-        :undefined (throw (ex-info "Encountered line with no defined state transition"
-                                   {:line#         line-#
-                                    :line          line
-                                    :current-state state}))
-        :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
-        ;; default
-        (update-in m
-                   [:threads (-> m :threads count dec)]     ;; update last thread in vec
-                   #(parse-and-append % state line))))
+    :prelude (update m :prelude conj line)
+    :epilogue (update m :epilogue conj line)
+    :undefined (throw (ex-info "Encountered line with no defined state transition"
+                        {:line#         line-#
+                         :line          line
+                         :current-state state}))
+    :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
+    ;; default
+    (update-in m
+      [:threads (-> m :threads count dec)]                  ;; update last thread in vec
+      #(parse-and-append % state line))))
 
 (defn parse-jstack-lines
   "main parsing method of this namespace, parses out the base
@@ -295,9 +295,9 @@
     (let [state (next-state prev-state line)]
       (if (not= state :end)
         (recur (parse-line m state line line-#)
-               state
-               (inc line-#)
-               xs)
+          state
+          (inc line-#)
+          xs)
         m))))
 
 (defn remove-waiting-on-lock [locks t]
@@ -316,17 +316,17 @@
 
 (defn extract-locks-and-wait [thread]
   (reduce
-   (fn [[locks wait-oid] t]
-     (cond
-       (and locks
-            (= (:wait-type t) :notify)) [(remove-waiting-on-lock locks t) wait-oid]
-       (#{:concurrent
-          :synchronized
-          :re-lock} (:wait-type t)) [locks {:oid (:oid t) :class (:class t)}]
-       (= (:type t) :locked) [(merge locks {(:oid t) (:class t)}) wait-oid]
-       :else [locks wait-oid]))
-   [nil nil]
-   (-> thread :trace reverse)))
+    (fn [[locks wait-oid] t]
+      (cond
+        (and locks
+          (= (:wait-type t) :notify)) [(remove-waiting-on-lock locks t) wait-oid]
+        (#{:concurrent
+           :synchronized
+           :re-lock} (:wait-type t)) [locks {:oid (:oid t) :class (:class t)}]
+        (= (:type t) :locked) [(merge locks {(:oid t) (:class t)}) wait-oid]
+        :else [locks wait-oid]))
+    [nil nil]
+    (-> thread :trace reverse)))
 
 (defn reconcile-locks [rec]
   (let [[locks waiting-on] (extract-locks-and-wait rec)]
@@ -340,7 +340,7 @@
   usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
   [lines]
   (-> (parse-jstack-lines lines)
-      (update :threads #(map reconcile-locks %))))
+    (update :threads #(map reconcile-locks %))))
 
 ;;
 ;; ANALYSIS FUNCTIONS
@@ -354,9 +354,9 @@
   dump is a map as returned by the dump function"
   [dump]
   (reduce
-   (fn [a t] (assoc a (:tid t) t))
-   (sorted-map)
-   (:threads dump)))
+    (fn [a t] (assoc a (:tid t) t))
+    (sorted-map)
+    (:threads dump)))
 
 (defn threads-by-name
   "returns a map {thread-name thread ...} where thread is the
@@ -364,9 +364,9 @@
   dump is a map as returned by the dump function"
   [dump]
   (reduce
-   (fn [a t] (assoc a (:NAME t) t))
-   (sorted-map)
-   (:threads dump)))
+    (fn [a t] (assoc a (:NAME t) t))
+    (sorted-map)
+    (:threads dump)))
 
 (defn lockers-by-oid
   "returns a map {<locked oid> <thread> ...} where oid is the locked object
@@ -374,15 +374,15 @@
   as returned by the dump function."
   [dump]
   (reduce
-   (fn [a t]
-     (if (:locked t)
-       (reduce-kv
-        (fn [a2 oid _] (assoc a2 oid t))
-        a
-        (:locked t))
-       a))
-   {}
-   (:threads dump)))
+    (fn [a t]
+      (if (:locked t)
+        (reduce-kv
+          (fn [a2 oid _] (assoc a2 oid t))
+          a
+          (:locked t))
+        a))
+    {}
+    (:threads dump)))
 
 (defn waiters-by-tid
   "returns a map {tidA {:tid tidB :oid oidB} ...} where thread A is waiting
@@ -391,40 +391,36 @@
   [dump]
   (let [lockers (lockers-by-oid dump)]
     (reduce
-     (fn [a t]
-       (let [waiting-on-oid (-> t :waiting-on :oid)
-             waiting-on-tid (:tid (get lockers waiting-on-oid))]
-         (if waiting-on-tid
-           (assoc a (:tid t) {:tid waiting-on-tid :oid waiting-on-oid})
-           a)))
-     (sorted-map)
-     (filter :waiting-on (:threads dump)))))
+      (fn [a t]
+        (let [waiting-on-oid (-> t :waiting-on :oid)
+              waiting-on-tid (:tid (get lockers waiting-on-oid))]
+          (if waiting-on-tid
+            (assoc a (:tid t) {:tid waiting-on-tid :oid waiting-on-oid})
+            a)))
+      (sorted-map)
+      (filter :waiting-on (:threads dump)))))
+
+(defn waiters-by-oid
+  "returns a map {oidA #{tidA tidB} ...} where thread A and thread A are waiting
+  on a lock on object oidA. The argument dump is a map as returned by the dump function"
+  [dump]
+  (reduce
+    (fn [a t]
+      (update a (-> t :waiting-on :oid) (fnil conj #{}) (:tid t)))
+    (sorted-map)
+    (filter :waiting-on (:threads dump))))
 
 (defn transitive-path
   "given a map of waiters as returned by waiters-by-tid and a thread
   t (tidC), returns a path [tidA tidB tidC] where thread C is waiting
   for a lock held by thread B, thread B is waiting for a lock
   held by thread A etc exhaustively until the chain completes"
-  [waiters lockers t]
-  (let [first-oid (first (keep (fn [[tidA m]] (when (= (:tid t) (:tid m)) (:oid m))) waiters))]
-  (loop [tid (:tid t) p [{:tid tid :oid first-oid}]]
+  [waiters t]
+  (loop [tid (:tid t) p []]
     (let [locker (get waiters tid)]
       (if (not locker)
-        (reverse p)
-        (recur (:tid locker) (conj p locker)))))))
-
-(defn graph-tid-comparator
-  [threads-by-tid a b]
-  ;(prn :comparing a :to b)
-  (let [ta        (get threads-by-tid (:tid a))
-        tb        (get threads-by-tid (:tid b))
-        ;_  (prn :ta ta)
-        ;_  (prn :tb tb)
-        a-oid     (-> ta :waiting-on :oid)
-        b-oid     (-> tb :waiting-on :oid)
-        oid-comp  (compare a-oid b-oid)
-        name-comp (compare (:NAME ta) (:NAME tb))]
-    (if (zero? oid-comp) name-comp oid-comp)))
+        (vec (reverse p))
+        (recur (:tid locker) (conj p locker))))))
 
 (defn transitive-lock-graph
   "returns a map {tidA {tidB {tidC nil tidD nil}}} where
@@ -436,95 +432,88 @@
   (-> threadD :waiting-on :oid), this works as any thread can at most
   wait for one oid"
   [dump]
-  (let [threads-by-tid (threads-by-tid dump)
-        lockers        (lockers-by-oid dump)
-        waiters        (waiters-by-tid dump)
+  (let [waiters-by-tid (waiters-by-tid dump)
+        waiters-by-oid (waiters-by-oid dump)
         threads        (filter :waiting-on (:threads dump))
-        paths          (map (partial transitive-path waiters lockers) threads)
-
-        tid-comp       (partial graph-tid-comparator threads-by-tid)]
+        paths          (distinct (map #(transitive-path waiters-by-tid %) threads))]
     (reduce
-     (fn [a p]
-       (prn :path p)
-       (if (< 1 (count p))
-         (assoc-in a p nil)
-         a))
-     {}
-     (reverse (sort-by count paths)))))
+      (fn [a path]
+        (reduce
+          (fn [a2 w]
+            (assoc-in a2 (conj path {:tid w}) nil))
+          a
+          (get waiters-by-oid (:oid (last path)))))
+      {}
+      (reverse (sort-by (comp count :path) paths)))))
 
 (defn render-tree
   ([key val]
-   (render-tree str compare nil key val))
-  ([render-fn key-compare-fn parent key val]
+   (render-tree str compare key val))
+  ([render-fn key-comp-f key val]
    (let [I-short  "│ "
          I-branch "│   "
          T-branch "├── "
          L-branch "└── "
          spacer   "    "
-         marker   (char 255)
-         ;val      (into (sorted-map-by key-compare-fn) val)
-         pre      (if (pos? (count val)) I-short marker)
-         label    (render-fn parent key val)
+         pre      (if (pos? (count val)) I-short "")
+         label    (render-fn key val)
          label    (cons (first label) (map #(str pre %) (rest label)))]
+     (prn :val val)
      (concat label
-             (mapcat
-              (fn [[c-key c-val] index]
-                (let [subtree      (render-tree render-fn key-compare-fn val c-key c-val)
-                      last?        (= index (dec (count val)))
-                      prefix-first (if last? L-branch T-branch)
-                      prefix-rest  (if last? spacer I-branch)]
-                  (cons (str prefix-first (first subtree))
-                        (map
-                         (fn [line]
-                           (if (= marker (first line))
-                             (str (str/trim prefix-rest) " " (subs line 1))
-                             (str prefix-rest line)))
-                         (next subtree)))))
-              val
-              (range))))))
+       (mapcat
+         (fn [[c-key c-val] index]
+           (let [subtree      (render-tree render-fn key-comp-f c-key c-val)
+                 last?        (= index (dec (count val)))
+                 prefix-first (if last? L-branch T-branch)
+                 prefix-rest  (if last? spacer I-branch)]
+             (cons (str prefix-first (first subtree))
+               (map
+                 #(str prefix-rest %)
+                 (next subtree)))))
+         val
+         (range))))))
 
 (defn keys-in [m]
   (if (map? m)
     (vec
-     (mapcat (fn [[k v]]
-               (let [sub    (keys-in v)
-                     nested (map #(into [k] %) (filter (comp not empty?) sub))]
-                 (if (seq nested)
-                   nested
-                   [[k]])))
-             m))
+      (mapcat (fn [[k v]]
+                (let [sub    (keys-in v)
+                      nested (map #(into [k] %) (filter (comp not empty?) sub))]
+                  (if (seq nested)
+                    nested
+                    [[k]])))
+        m))
     []))
 
 (defn short-name [fqn]
-  (last (re-seq #"[^.]+" "atg.adapter.gsa.GSATransaction")))
+  (last (re-seq #"[^.]+" fqn)))
 
-(defn display [threads-by-tid parent tid m]
-  (let [t         (get threads-by-tid tid)
-        tids      (keys parent)
-        idx       (first (keep-indexed (fn [i x] (when (= x tid) i)) tids))
-        next-idx  (when idx (inc idx))
-        next-tid  (when (and next-idx (< next-idx (count tids))) (nth tids next-idx))
-        next-t    (get threads-by-tid next-tid)
-        t-wait    (-> t :waiting-on)
-        n-wait    (-> next-t :waiting-on)
-        extra?    (or (nil? parent)
-                      (pos? (count m))
-                      (and t-wait n-wait (not= (:oid t-wait) (:oid n-wait))))
-        wait-tid  (or (first (first m)) tid)
-        c-waiting (-> (get threads-by-tid wait-tid) :waiting-on)
-        blocked   (count (distinct (flatten (keys-in m))))]
-
+(defn display [threads-by-tid k m]
+  (let [t       (get threads-by-tid (:tid k))
+        extra?  (pos? (count m))
+        class   (first (keep (fn [[o c]] (when (= o (:oid k)) c)) (:locked t)))
+        b-count (count (distinct (flatten (keys-in m))))]
     (cond-> [(:NAME t)]
-            extra? (conj (str "tid " (:tid t) " locked " (short-name (:class c-waiting)) " " (:oid c-waiting) " - blocks " blocked " threads")))))
+      extra? (conj (str
+                     "tid " (:tid t)
+                     " locked " (short-name class) " " (:oid k)
+                     " - blocks " b-count " threads")))))
 ;(:waiting-on t) (str " - waiting on " (str/join " " (flatten (vec (:waiting-on t))))))))
 
 (defn render-lock-graph
   [dump]
   (let [graph          (transitive-lock-graph dump)
         threads-by-tid (threads-by-tid dump)
-        render-fn      (partial display threads-by-tid)]
-    (mapcat (fn [[k v]] (render-tree render-fn compare nil k v)) graph)))
+        render-fn      (partial display threads-by-tid)
+        key-comp-f     (fn [a b] (compare
+                                   (:NAME (get threads-by-tid (:tid a)))
+                                   (:NAME (get threads-by-tid (:tid b)))))]
+    (mapcat (fn [[k v]] (render-tree render-fn key-comp-f k v)) graph)))
 
+(defn print-lock-graph
+  [dump]
+  (doseq [line (render-lock-graph dump)]
+    (println line)))
 ;   ajp|024721.012|cid=xjWPV4WJhU|rid=MJm3lyXjlo|/us/browse/_/N-1z0tidcZ1z0vrsaZ1z11u3u
 ;   │ locked 0x00000007231f7420 atg.adapter.gsa.GSATransaction - blocks 87 threads
 ;   └── Thread-5987
