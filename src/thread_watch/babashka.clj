@@ -1,19 +1,9 @@
 (ns thread-watch.babashka
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [clojure.java.io :as jio])
   (:import [java.time.format DateTimeFormatter]
-           [java.time LocalTime]))
-
-; TODO:
-;   -
-;   - top blocker threads
-;   - lock type counts (transaction etc)
-;   - number of threads
-;   - longest running threads
-;   - graph extract extra info reaper | socketRead0
-; elsewhere:
-;   - connection counting servlet url -> [req count, conn count]
-;   - long running query sql logging
-
+           [java.time LocalTime LocalDateTime]
+           [java.io File]))
 
 ; namespace: jstack-tools
 ;
@@ -38,13 +28,20 @@
 
 ; #!/usr/bin/env bb
 
-; "AWT-XAWT" #21 daemon prio=6 os_prio=0 cpu=54648.82ms elapsed=270369.39s tid=0x00007f4e0c0e1000 nid=0x7268 runnable  [0x00007f4e050be000]
-; "AWT-Shutdown" #25 prio=4 os_prio=0 cpu=4.89ms elapsed=270369.39s tid=0x00007f4e0c0e9800 nid=0x726b in Object.wait()  [0x00007f4e04dbb000]
-; \"AWT-Shutdown\" #25 prio=4 os_prio=0 cpu=4.89ms elapsed=270369.39s tid=0x00007f4e0c0e9800 nid=0x726b in Object.wait()  [0x00007f4e04dbb000]
-
 ;; the below two defs define a line based state machine to
 ;; parse jstack output. A state machine approach is a robust
 ;; and transparent way to parse the jstack output
+
+; TODO:
+;   -
+;   - top blocker threads
+;   - lock type counts (transaction etc)
+;   - number of threads
+;   - longest running threads
+;   - graph extract extra info reaper | socketRead0
+; elsewhere:
+;   - connection counting servlet url -> [req count, conn count]
+;   - long running query sql logging
 
 ;; define common block transitions
 (def block-transitions
@@ -109,15 +106,15 @@
 (defn next-state [state line]
   (let [transitions (state finite-state-machine)
         [new-state _] (keep
-                        (fn [[pattern state]]
-                          (cond
-                            (= :any pattern) state
-                            (and (= :empty pattern)
-                              (= (count line) 0)) state
-                            (and (string? pattern)
-                              (str/starts-with? line pattern)) state
-                            :else nil))
-                        (partition 2 transitions))]
+                       (fn [[pattern state]]
+                         (cond
+                           (= :any pattern) state
+                           (and (= :empty pattern)
+                                (= (count line) 0)) state
+                           (and (string? pattern)
+                                (str/starts-with? line pattern)) state
+                           :else nil))
+                       (partition 2 transitions))]
     (or new-state :undefined)))
 
 (defn assoc-if
@@ -170,17 +167,17 @@
    Example line: '\"RMI TCP Connection(idle)\" daemon prio=10 tid=0x0000000050977800 nid=0x34d waiting on condition [0x00002b7b25bab000]'"
   (let [prop (partial first-line-prop line)]
     (assoc-if
-      {:NAME      (thread-name line)
-       :id        (id line)
-       :daemon?   (daemon? line)
-       :prio      (some-> (prop "prio") Integer/parseInt)
-       :os-prio   (some-> (prop "os_prio") Integer/parseInt)
-       :cpu       (prop "cpu")
-       :elapsed   (prop "elapsed")
-       :tid       (prop "tid")
-       :nid       (prop "nid")
-       :currently (currently line)
-       :lines     [line]})))
+     {:NAME      (thread-name line)
+      :id        (id line)
+      :daemon?   (daemon? line)
+      :prio      (some-> (prop "prio") Integer/parseInt)
+      :os-prio   (some-> (prop "os_prio") Integer/parseInt)
+      :cpu       (prop "cpu")
+      :elapsed   (prop "elapsed")
+      :tid       (prop "tid")
+      :nid       (prop "nid")
+      :currently (currently line)
+      :lines     [line]})))
 
 (defn parse-block-second-line [rec line]
   "parses the second line of a thread block. The first argument is a map
@@ -211,64 +208,59 @@
 ;- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)
 ;- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)
 (comment
-  ;; testing the parsing of various
-  (map (fn [line]
-         (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
-           {:oid oid :class class :class-for class-for}))
-    ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
-     "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
-     "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
-     "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
-     "\t- waiting on <no object reference available>"
-     "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
-     "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
-  )
+ ;; testing the parsing of various
+ (map (fn [line]
+        (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
+          {:oid oid :class class :class-for class-for}))
+      ["\t- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)"
+       "\t- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)"
+       "\t- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)"
+       "\t- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)"
+       "\t- waiting on <no object reference available>"
+       "\t- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)"
+       "\t- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)])"])
+ )
 
 (defn parse-dashed-line
   "parse one of the '\t- xxx' lines in the thread block stack trace"
   [m state line]
   (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
     (update m :trace (fnil conj []) (assoc-if (state dash-types)
-                                      {:oid       oid
-                                       :class     class
-                                       :class-for class-for
-                                       :line      line}))))
+                                              {:oid       oid
+                                               :class     class
+                                               :class-for class-for
+                                               :line      line}))))
 
 (defn parse-block-line [rec state line]
   (case state
-    :block-second (parse-block-second-line rec line)
-    :trace-element (parse-trace-element-line rec line)
-    ;;:owned-locks-start (update rec :lines conj "")
-    :locked (parse-dashed-line rec state line)
-    (:waiting-concurrent
-     :waiting-notify
-     :waiting-synchronized
-     :waiting-re-lock) (parse-dashed-line rec state line)
-    rec))
+        :block-second (parse-block-second-line rec line)
+        :trace-element (parse-trace-element-line rec line)
+        ;;:owned-locks-start (update rec :lines conj "")
+        :locked (parse-dashed-line rec state line)
+        (:waiting-concurrent
+         :waiting-notify
+         :waiting-synchronized
+         :waiting-re-lock) (parse-dashed-line rec state line)
+        rec))
 
 (defn parse-and-append [rec state line]
   (-> rec
-    (parse-block-line state line)
-    (update :lines conj line)))
-
-;(:owned-locks-start
-; :owned-lock
-; :no-compile-task
-; :block-end)
+      (parse-block-line state line)
+      (update :lines conj line)))
 
 (defn parse-line [m state line line-#]
   (case state
-    :prelude (update m :prelude conj line)
-    :epilogue (update m :epilogue conj line)
-    :undefined (throw (ex-info "Encountered line with no defined state transition"
-                        {:line#         line-#
-                         :line          line
-                         :current-state state}))
-    :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
-    ;; default
-    (update-in m
-      [:threads (-> m :threads count dec)]                  ;; update last thread in vec
-      #(parse-and-append % state line))))
+        :prelude (update m :prelude conj line)
+        :epilogue (update m :epilogue conj line)
+        :undefined (throw (ex-info "Encountered line with no defined state transition"
+                                   {:line#         line-#
+                                    :line          line
+                                    :current-state state}))
+        :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
+        ;; default
+        (update-in m
+                   [:threads (-> m :threads count dec)]     ;; update last thread in vec
+                   #(parse-and-append % state line))))
 
 (defn parse-jstack-lines
   "main parsing method of this namespace, parses out the base
@@ -283,39 +275,29 @@
     (let [state (next-state prev-state line)]
       (if (not= state :end)
         (recur (parse-line m state line line-#)
-          state
-          (inc line-#)
-          xs)
+               state
+               (inc line-#)
+               xs)
         m))))
 
 (defn remove-waiting-on-lock [locks t]
   (let [result (filter (fn [lock] (not= (:oid lock) (:oid t))) locks)]
     (if (empty? result) nil result)))
 
-; types
-;- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)
-;- parking to wait for  <0x00000000a0f42790> (a java.util.concurrent.SynchronousQueue$TransferStack)
-;- parking to wait for  <0x00000007da611cb0> (a ext.iplocation.com.google.common.util.concurrent.SettableFuture)
-;- waiting on <0x00000000a17769f0> (a java.lang.ref.Reference$Lock)
-;- waiting on <no object reference available>
-;- waiting to lock <0x0000000629bf6988> (a java.lang.Class for atg.servlet.SessionConfirmationNumberManager)
-;- waiting to lock <0x0000000640381bb8> (a org.jboss.virtual.plugins.context.zip.ZipEntryContext)
-;- waiting to re-lock in wait() <0x00000004429f3b08> (a java.util.TaskQueue)
-
 (defn extract-locks-and-wait [thread]
   (reduce
-    (fn [[locks wait-oid] te]
-      (cond
-        (and locks
-          (= (:wait-type te) :notify)) [(remove-waiting-on-lock locks te) wait-oid]
-        (#{:concurrent
-           :synchronized
-           :re-lock} (:wait-type te)) [locks {:oid (:oid te) :class (:class te)}]
-        (= (:type te) :locked) [((fnil conj []) locks {:oid   (:oid te)
-                                                       :class (:class te)}) wait-oid]
-        :else [locks wait-oid]))
-    [nil nil]
-    (-> thread :trace reverse)))
+   (fn [[locks wait-oid] te]
+     (cond
+       (and locks
+            (= (:wait-type te) :notify)) [(remove-waiting-on-lock locks te) wait-oid]
+       (#{:concurrent
+          :synchronized
+          :re-lock} (:wait-type te)) [locks {:oid (:oid te) :class (:class te)}]
+       (= (:type te) :locked) [((fnil conj []) locks {:oid   (:oid te)
+                                                      :class (:class te)}) wait-oid]
+       :else [locks wait-oid]))
+   [nil nil]
+   (-> thread :trace reverse)))
 
 (defn reconcile-locks
   "post procesing for a thread, walks through the trace of the thread and
@@ -336,38 +318,55 @@
     (if (or (= pre "ajp") (= pre "http"))
       (let [parsed (thread-time time)]
         (assoc thread :request (into (sorted-map)
-                                 {:time        time
-                                  :time-parsed parsed
-                                  :cid         cid
-                                  :rid         rid
-                                  :url         url})))
+                                     {:time        time
+                                      :time-parsed parsed
+                                      :cid         cid
+                                      :rid         rid
+                                      :url         url})))
       thread)))
+
+(defn decorate-dump-date [dump]
+  (let [first-line   (first (:prelude dump))
+        matches      (re-matches #"\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d" first-line)
+        date-pattern "yyyy-MM-dd HH:mm:ss"]
+    (if matches
+      (assoc dump :date (LocalDateTime/parse first-line (DateTimeFormatter/ofPattern date-pattern)))
+      dump)))
+
+(defn extract-lines [line-source]
+  (cond
+    (seq? line-source) line-source
+    (instance? File line-source) (str/split-lines (slurp line-source))
+    (string? line-source) (str/split-lines (slurp (jio/file line-source)))
+    :else (throw (RuntimeException. (str "unknown line source: " line-source)))))
+
 
 ;; main entrypoint to this namespace, give
 (defn dump
-  "main entrypoint to this namespace. Given a seq of lines from a jstack thread
+  "main entry point to this namespace. Given a seq of lines from a jstack thread
   dump, produces a clojure data structure representing the thread dump. Example
   usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
-  [lines]
-  (-> (parse-jstack-lines lines)
-    (update :threads #(map reconcile-locks %))
-    (update :threads #(map decorate-request-thread %))))
+  [line-source]
+  (-> (extract-lines line-source)
+      (parse-jstack-lines)
+      (decorate-dump-date)
+      (update :threads #(map reconcile-locks %))
+      (update :threads #(map decorate-request-thread %))))
 
 ;;
 ;; ANALYSIS FUNCTIONS
 ;; the below functions are used for analysing and working with
 ;; a dump as produced by the dump function above
 ;;
-
 (defn threads-by-tid
   "returns a map {tid thread ...} where thread is the
   map structure representing a thread in the dump. The argument
   dump is a map as returned by the dump function"
   [dump]
   (reduce
-    (fn [a t] (assoc a (:tid t) t))
-    (sorted-map)
-    (:threads dump)))
+   (fn [a t] (assoc a (:tid t) t))
+   (sorted-map)
+   (:threads dump)))
 
 (defn threads-by-name
   "returns a map {thread-name thread ...} where thread is the
@@ -375,9 +374,9 @@
   dump is a map as returned by the dump function"
   [dump]
   (reduce
-    (fn [a t] (assoc a (:NAME t) t))
-    (sorted-map)
-    (:threads dump)))
+   (fn [a t] (assoc a (:NAME t) t))
+   (sorted-map)
+   (:threads dump)))
 
 (defn lockers-by-oid
   "returns a map {<locked oid> <thread> ...} where oid is the locked object
@@ -385,15 +384,15 @@
   as returned by the dump function."
   [dump]
   (reduce
-    (fn [a t]
-      (if (:locked t)
-        (reduce
-          (fn [a2 {:keys [oid class]}] (assoc a2 oid t))    ;;@@@
-          a
-          (:locked t))
-        a))
-    {}
-    (:threads dump)))
+   (fn [a t]
+     (if (:locked t)
+       (reduce
+        (fn [a2 {:keys [oid]}] (assoc a2 oid t))            ;;@@@
+        a
+        (:locked t))
+       a))
+   {}
+   (:threads dump)))
 
 (defn waiters-by-tid
   "returns a map {tidA {:tid tidB :oid oidB} ...} where thread A is waiting
@@ -402,24 +401,24 @@
   [dump]
   (let [lockers (lockers-by-oid dump)]
     (reduce
-      (fn [a t]
-        (let [waiting-on-oid (-> t :waiting-on :oid)
-              waiting-on-tid (:tid (get lockers waiting-on-oid))]
-          (if waiting-on-tid
-            (assoc a (:tid t) {:tid waiting-on-tid :oid waiting-on-oid})
-            a)))
-      (sorted-map)
-      (filter :waiting-on (:threads dump)))))
+     (fn [a t]
+       (let [waiting-on-oid (-> t :waiting-on :oid)
+             waiting-on-tid (:tid (get lockers waiting-on-oid))]
+         (if waiting-on-tid
+           (assoc a (:tid t) {:tid waiting-on-tid :oid waiting-on-oid})
+           a)))
+     (sorted-map)
+     (filter :waiting-on (:threads dump)))))
 
 (defn waiters-by-oid
   "returns a map {oidA #{tidA tidB} ...} where thread A and thread A are waiting
   on a lock on object oidA. The argument dump is a map as returned by the dump function"
   [dump]
   (reduce
-    (fn [a t]
-      (update a (-> t :waiting-on :oid) (fnil conj #{}) (:tid t)))
-    (sorted-map)
-    (filter :waiting-on (:threads dump))))
+   (fn [a t]
+     (update a (-> t :waiting-on :oid) (fnil conj #{}) (:tid t)))
+   (sorted-map)
+   (filter :waiting-on (:threads dump))))
 
 (defn transitive-path
   "given a map of waiters as returned by waiters-by-tid and a thread
@@ -448,14 +447,18 @@
         threads        (filter :waiting-on (:threads dump))
         paths          (distinct (map #(transitive-path waiters-by-tid %) threads))]
     (reduce
-      (fn [a path]
-        (reduce
-          (fn [a2 w]
-            (assoc-in a2 (conj path {:tid w}) nil))
-          a
-          (get waiters-by-oid (:oid (last path)))))
-      {}
-      (reverse (sort-by (comp count :path) paths)))))
+     (fn [a path]
+       (reduce
+        (fn [a2 waiter-tid]
+          (let [keys        (keys (get-in a2 path))
+                tid-exists? (first (filter #(= (:tid %) waiter-tid) keys))]
+            (if tid-exists?
+              a2
+              (assoc-in a2 (conj path {:tid waiter-tid}) nil))))
+        a
+        (get waiters-by-oid (:oid (last path)))))
+     {}
+     (reverse (sort-by count paths)))))
 
 (defn render-tree
   ([key val]
@@ -470,29 +473,29 @@
          label    (render-fn key val)
          label    (cons (first label) (map #(str pre %) (rest label)))]
      (concat label
-       (mapcat
-         (fn [[c-key c-val] index]
-           (let [subtree      (render-tree render-fn key-comp-f c-key c-val)
-                 last?        (= index (dec (count val)))
-                 prefix-first (if last? L-branch T-branch)
-                 prefix-rest  (if last? spacer I-branch)]
-             (cons (str prefix-first (first subtree))
-               (map
-                 #(str prefix-rest %)
-                 (next subtree)))))
-         (into (sorted-map-by key-comp-f) val)
-         (range))))))
+             (mapcat
+              (fn [[c-key c-val] index]
+                (let [subtree      (render-tree render-fn key-comp-f c-key c-val)
+                      last?        (= index (dec (count val)))
+                      prefix-first (if last? L-branch T-branch)
+                      prefix-rest  (if last? spacer I-branch)]
+                  (cons (str prefix-first (first subtree))
+                        (map
+                         #(str prefix-rest %)
+                         (next subtree)))))
+              (into (sorted-map-by key-comp-f) val)
+              (range))))))
 
 (defn keys-in [m]
   (if (map? m)
     (vec
-      (mapcat (fn [[k v]]
-                (let [sub    (keys-in v)
-                      nested (map #(into [k] %) (filter (comp not empty?) sub))]
-                  (if (seq nested)
-                    nested
-                    [[k]])))
-        m))
+     (mapcat (fn [[k v]]
+               (let [sub    (keys-in v)
+                     nested (map #(into [k] %) (filter (comp not empty?) sub))]
+                 (if (seq nested)
+                   nested
+                   [[k]])))
+             m))
     []))
 
 (defn short-name [fqn]
@@ -520,13 +523,13 @@
         b-count (count (distinct (flatten (keys-in m))))
         extra   (thread-extra-info t)]
     (cond-> [(str (:NAME t) extra)]
-      extra? (conj (str
-                     "tid " (:tid t)
-                     " locked " (short-name class) " " (:oid k)
-                     " - blocks " b-count " threads")))))
-;(:waiting-on t) (str " - waiting on " (str/join " " (flatten (vec (:waiting-on t))))))))
+            extra? (conj (str
+                          "tid " (:tid t)
+                          " locked " (short-name class) " " (:oid k)
+                          " - blocks " b-count " threads")))))
 
 (defn render-lock-graph
+  ""
   [dump]
   (let [graph          (transitive-lock-graph dump)
         threads-by-tid (threads-by-tid dump)
@@ -541,160 +544,3 @@
   [dump]
   (doseq [line (render-lock-graph dump)]
     (println line)))
-;   ajp|024721.012|cid=xjWPV4WJhU|rid=MJm3lyXjlo|/us/browse/_/N-1z0tidcZ1z0vrsaZ1z11u3u
-;   │ locked 0x00000007231f7420 atg.adapter.gsa.GSATransaction - blocks 87 threads
-;   └── Thread-5987
-;       │ locked 0x00000006ee7545b0 atg.adapter.gsa.GSAContentItem - blocks 80 threads
-;       ├── ajp|025619.779|cid=UtRSuVPjI8|rid=a7jHk8kh3H|/us/
-;       ├── ajp|025703.514|cid=LiInjTCnXE|rid=dfKwrxHzUW|ts-bathroom-fittings-bathroom-sink-drains/_/N-2d7t
-;       ├── ajp|025707.725|cid=FTeVSVMb40|rid=M66beMMs29|/us/
-;       ├── ajp|025715.507|cid=1zcPGpQxly|rid=wvvYMCYh2N|/us/browse/bathroom-toilets/_/N-2569
-;       ├── ajp|025555.113|cid=Ydq3HfKJKj|rid=b2DXhywwKO|/us/
-;       ├── ajp|025703.338|cid=b1LPPfx3uf|rid=yqLu01auxz|/us/s
-;       ├── ajp|025702.854|cid=JrUBWAcx1V|rid=CYLdJdUc4s|us/Material-Color-Palette/article/CNT120600001.htm
-;       ├── ajp|025657.528|cid=Rmpa3EX6IE|rid=BGqVqTe2ri|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025737.334|cid=PqObJigXeK|rid=u0cOnb3zkD|om-commercial-bathroom-commercial-toilets/_/N-2d82
-;       ├── ajp|025657.583|cid=SxUfpRVBUL|rid=RLvCi5dwCX|/us/kitchen-sinks/article/CNT126100002.htm
-;       ├── ajp|025626.002|cid=Q5evl9qwWL|rid=NJ1rvm3aWI|-tall-apron/productDetail/kitchen-sinks/428755.htm
-;       ├── ajp|025612.046|cid=M4ErKAOity|rid=kddH13R5YA|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
-;       ├── ajp|025557.455|cid=FTeVSVMb40|rid=1gDvouyqL7|/us/
-;       ├── ajp|025653.255|cid=9ZX556ESIe|rid=o26wAnw7lU|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025655.646|cid=BdOSZ1pmnf|rid=Zynj5g01pl|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
-;       ├── ajp|025729.130|cid=9ZX556ESIe|rid=1YKLGSgxto|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025547.274|cid=SxUfpRVBUL|rid=KBTh7xFovd|/us/kitchen-sinks/article/CNT126100002.htm
-;       ├── ajp|025603.985|cid=JrUBWAcx1V|rid=nTQ7sYsn2d|us/Material-Color-Palette/article/CNT120600001.htm
-;       ├── ajp|025605.237|cid=NWFSK68BxY|rid=wqYniIDDw6|/us/browse/bathroom-toilets/_/N-2569
-;       ├── ajp|025552.423|cid=C3f5Vpi42l|rid=t0wmrGxhDz|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
-;       ├── ajp|025705.357|cid=eXg2LCfLN2|rid=Pxu0PNkbAl|/us/
-;       ├── ajp|025603.742|cid=n0IxwLJC1w|rid=SO1EJg3Mpr|/us/browse/_/N-1z11tv4Z1z0uklg
-;       ├── ajp|025653.263|cid=EoPNK5hOwR|rid=KbDLWXwDQg|us/browse/bathroom-bathing/_/N-255vZ5jZ5iZ5kZ8dZ8g
-;       ├── ajp|025634.418|cid=MpB1cjLzsO|rid=xhW0nhtZAB|er-Professional-Toolbox/remodeler/CNT122800001.htm
-;       ├── ajp|025722.316|cid=xGaLlmK5Up|rid=jLTuEOJ8LS|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
-;       ├── ajp|025712.120|cid=9ixRiUsL6p|rid=sVosrDzPjI|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
-;       ├── ajp|025730.816|cid=dA7f1aNVPK|rid=pkiA2B4Xqg|/us/browse/kitchen-bar-sinks/_/N-25b3Z1z11twx
-;       ├── ajp|025736.271|cid=GyclaKJQEM|rid=KOM1TpdbFy|-tall-apron/productDetail/kitchen-sinks/428755.htm
-;       ├── ajp|025618.865|cid=9ZX556ESIe|rid=sq741RjezR|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025706.973|cid=DDqO6T112n|rid=8NvEaygRdb|/us/s
-;       ├── ajp|025552.059|cid=JrUBWAcx1V|rid=hf7Syq0mE7|us/Material-Color-Palette/article/CNT120600001.htm
-;       ├── ajp|025628.389|cid=bbG8XfqPMX|rid=M53ESsveZn|/us/
-;       ├── ajp|025733.650|cid=Bb80Ceucwi|rid=5kCdD10jPM|/us/
-;       ├── ajp|025545.375|cid=4ktrUGce5M|rid=tLssDVEHHz|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
-;       ├── ajp|025702.698|cid=owxWMjuGvY|rid=rclSvWAm9l|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
-;       ├── ajp|025623.421|cid=0MatPyHtQz|rid=OWY8sxmvNA|/us/
-;       ├── ajp|025714.270|cid=JrUBWAcx1V|rid=LNBPc21wQT|us/Material-Color-Palette/article/CNT120600001.htm
-;       ├── ajp|025641.030|cid=JrUBWAcx1V|rid=vC5mHlxT7S|er-Professional-Toolbox/remodeler/CNT122800001.htm
-;       ├── ajp|025542.985|cid=9ZX556ESIe|rid=dQ8wdRsN7p|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025701.209|cid=4nfgW0ZBmV|rid=ihss6DIGPU|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025714.002|cid=3HmGwz0rpm|rid=PfS1G43qUI|/us/browse/_/N-1z11tv4Z1z0uklg
-;       ├── ajp|025554.370|cid=Y0KzRJi1Qy|rid=3raSjiiSse|/us/campaign/thank-you.jsp
-;       ├── ajp|025716.720|cid=HffBYyNm6k|rid=VfQON438Iy|/nonprdcontent/listDetail.jsp
-;       ├── ajp|025725.745|cid=COS56IPjv2|rid=FxLDDpMVGu|ever-handles/productDetail/sink-faucets/870355.htm
-;       ├── ajp|025704.641|cid=Y0KzRJi1Qy|rid=WFtQ5Je7E4|/us/campaign/thank-you.jsp
-;       ├── ajp|025730.050|cid=2CCmLyEivf|rid=rWjXA7jKAT|/us/
-;       ├── ajp|025738.558|cid=4ABheH03Qk|rid=PWXNHfyPiE|/us/catalog/productDetails.jsp
-;       ├── ajp|025738.665|cid=SuH69Z2uth|rid=U7zpAjkqMc|/us/
-;       ├── ajp|025742.600|cid=nVLO1dhqk5|rid=TfVNvGFwiQ|/us/s
-;       ├── ajp|025743.027|cid=9ZX556ESIe|rid=sIKaX1oOCL|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025743.248|cid=9ZX556ESIe|rid=8ftFJpWAkL|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025744.692|cid=OC9WfoQiWk|rid=aorxFi7oPh|er-Professional-Toolbox/remodeler/CNT122800001.htm
-;       ├── ajp|025745.712|cid=XGrX6PeLCL|rid=Szi0YOAfTJ|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
-;       ├── ajp|025747.157|cid=koG9JQGp0s|rid=Y0mydldbCs|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025747.247|cid=SxUfpRVBUL|rid=ujdoCGt7jP|/us/kitchen-sinks/article/CNT126100002.htm
-;       ├── ajp|025748.916|cid=yrfZcpZXrY|rid=2YBMwdQqrr|/us/s/_/N-2e8d
-;       ├── ajp|025751.304|cid=JrUBWAcx1V|rid=M9r6TKBLyO|er-Professional-Toolbox/remodeler/CNT122800001.htm
-;       ├── ajp|025751.991|cid=g3oG0K0vXK|rid=HysJUeoaNw|/us/
-;       ├── ajp|025752.364|cid=hVZzo1ES2c|rid=tbvODJvmtn|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
-;       ├── ajp|025754.363|cid=Y0KzRJi1Qy|rid=ZnhRHWHvfV|/us/campaign/thank-you.jsp
-;       ├── ajp|025757.094|cid=iniY4YIZNG|rid=XHCuZ5LHzv|/us/
-;       ├── ajp|025757.128|cid=vwDw59z3cO|rid=CV5oTsyLAk|/us/
-;       ├── ajp|025803.222|cid=yeLrjqa0SE|rid=gD0cfjAQcf|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025803.571|cid=08uKplGRn7|rid=kAHIRnC07x|us/browse/bathroom-bathing/_/N-255vZ5jZ5iZ5kZ8dZ8g
-;       ├── ajp|025805.458|cid=xuFZ9SRj56|rid=jMNLwOs2zg|/us/catalog/productDetails.jsp
-;       ├── ajp|025807.756|cid=0pwQJsj8mb|rid=wNAwENUjqM|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025811.457|cid=EpUNWoRlFl|rid=gqtscqTrqR|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025813.605|cid=FSBkyRNbxq|rid=cgWgFeU4Hk|/us/s
-;       ├── ajp|025813.785|cid=xDfB5XVyCQ|rid=7N7GDtGnsY|ts-bathroom-fittings-bathroom-sink-drains/_/N-2d7t
-;       ├── ajp|025817.247|cid=88n6R2mcaF|rid=plOnnF1MaL|/us/s
-;       ├── ajp|025822.392|cid=9Oq6hxSRfi|rid=9EueUPmp2j|/us/browse/bathroom-bathing/_/N-255vZ1z1237y
-;       ├── ajp|025826.980|cid=Qyv8UD7qCN|rid=zrkcDGuOxR|/nonprdcontent/listDetail.jsp
-;       ├── ajp|025835.997|cid=JeJc6odKNw|rid=8KQlyOTikR|ever-handles/productDetail/sink-faucets/870355.htm
-;       ├── ajp|025841.067|cid=EzqvXWbuDT|rid=zOLwfNWQv6|/us/browse/kitchen-bar-sinks/_/N-25b3Z1z11twx
-;       ├── ajp|025847.590|cid=cDjhOBYzaA|rid=dhaZ5GOHv0|om-commercial-bathroom-commercial-toilets/_/N-2d82
-;       ├── ajp|025848.832|cid=siLXmuTOg9|rid=u0EvTbQqrz|/us/catalog/productDetails.jsp
-;       ├── ajp|025852.865|cid=nVLO1dhqk5|rid=20yI8Yz4bL|/us/s
-;       ├── ajp|025853.294|cid=9ZX556ESIe|rid=yw3aZWo0Dg|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025853.531|cid=9ZX556ESIe|rid=p2wjX6lMov|/us/browse/_/N-1z0tidcZ1z11ksnZ1z11v58
-;       ├── ajp|025855.981|cid=UzGx8MZ8KA|rid=UssPYhSMSt|/us/browse/_/N-1z11u0lZ1z11p5cZ1z11u2o
-;       │ locked 0x00000006ee75233 atg.adapter.gsa.GSAContentItem - blocks 6 threads
-;       ├── ajp|025857.424|cid=PZUgb2H69e|rid=PuP0GuenCb|freestanding-tub/productDetail/bathing/1284618.htm
-;       ├── ajp|025857.535|cid=SxUfpRVBUL|rid=aMNIWnYrh5|/us/kitchen-sinks/article/CNT126100002.htm
-;       ├── ajp|025859.197|cid=IGG4852K1n|rid=yyXghBlh17|/us/s/_/N-2e8d
-;       ├── ajp|025902.263|cid=wPxCAZF6fc|rid=WE3Wf25JdL|/us/
-;       ├── ajp|025902.625|cid=KzAtbwZLOP|rid=yuzoFS4ZUq|chen-kitchen-sink-faucets/_/N-2d8uZ1z11ugqZ1z1254b
-;       └── ajp|025904.633|cid=Y0KzRJi1Qy|rid=TaRNpspeQv|/us/campaign/thank-you.jsp"
-
-
-; waiters
-;
-; {tidB tidA        ;; B waiting on lock oidA held by tidA
-;  tidC tidB
-;  tidD tidB
-;  tidE tidB
-;  tidF oidC }
-; ->
-; {tidA {tidB {tidC {tidF nil}
-;              tidD nil
-;              tidE nil}}}
-;
-;
-;
-;
-;
-;
-; {tidA {tidB {tidC {tidF nil}
-;              tidD nil
-;              tidE nil}}}
-;
-; {tidA {{:tid tidB :oid oidB} {{:tid tidC :oid oidC} {{:tid tidF} nil}
-;                               {:tid tidD} nil
-;                               {:tid tidE} nil}}}
-;
-; root node: is not waiting on anything (not in any set)
-; report ->
-; tidA locked X - 5 transitive threads waiting
-;   tidB waiting on X, locked Y - 4 transitive threads waiting
-;     tidC waiting on Y, locked Z - 1 transitive threads waiting
-;     tidD waiting on Y
-;     tidE waiting on Y
-; {oidA {tid #{oidB oidC}}   ;; oidA - transaction
-;  oidB {tidB #{}            ;; oidB - ContentItem
-;        tidC #{}
-;        tidD #{}}
-;  oidC {tidE #{}}
-; t:
-;   {:locked {oid class
-;             oid class}
-;    :waiting-on oid}
-;
-;  {oidA {oidB {oidC {:tid x :NAME y :}
-;               oidD {:tid x :NAME y :}}}}
-;  ->
-;  {oidA {oidB {oidC {:tid x :NAME y :}
-;               oidD {oidE {:tid x :NAME y :}}}}}
-;
-;  {oidA {:tid x :NAME y}}
-;  ->
-;  {oidA {:tid x :NAME y}
-;   oidB {:tid x :NAME y}}
-;
-;
-;
-
-
-
-
-
-
-
-(defn thread-by-name [dump name]
-  (first (filter #(= (:name %) name) (-> dump :threads))))
