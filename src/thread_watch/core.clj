@@ -4,9 +4,8 @@
             [clojure.java.io :as jio]
             [thread-watch.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
-           [java.time LocalTime LocalDateTime]
-           [java.io File]
-           [java.time.temporal TemporalUnit ChronoUnit]))
+           [java.time LocalTime LocalDateTime ZoneOffset Duration]
+           [java.io File]))
 
 ; namespace: jstack-tools
 ;
@@ -44,6 +43,7 @@
 ;   - long running query sql logging
 
 (def trace-limit 250)
+(def date-roll-fluff-seconds 5)
 
 ;; define common block transitions
 (def block-transitions
@@ -308,11 +308,15 @@
                       :waiting-on waiting-on})))
 
 (defn thread-date [dump-date time-str]
-  (let [time (LocalTime/parse time-str (DateTimeFormatter/ofPattern "HHmmss.SSS"))
-        date (.atDate time (.toLocalDate dump-date))]
-    (if (.isAfter date dump-date)                           ;; we don't store dates in thread names, handle rolling
-      (.minus date 1 ChronoUnit/DAYS)
-      date)))
+  (when time-str
+    (let [one-day    (Duration/ofDays 1)
+          fluff      (Duration/ofSeconds date-roll-fluff-seconds)
+          fluff-date (.plus dump-date fluff)
+          time       (LocalTime/parse time-str (DateTimeFormatter/ofPattern "HHmmss.SSS"))
+          date       (.atDate time (.toLocalDate dump-date))]
+      (if (.isAfter date fluff-date)                         ;; we don't store dates in thread names, handle rolling
+        (.minus date one-day)
+        date))))
 
 (defn decorate-request-thread [dump-date thread]
   (let [pattern #"([^\\|]+)\|([^\\|]+)\|cid=([^\\|]+)\|rid=([^\\|]+)\|([^\\|]+)"
@@ -548,11 +552,15 @@
         (println line)))))
 
 (defn print-oldest-threads [dump]
-  (let [thread-date (fn [t] (-> t :request :date))
-        threads     (sort-by thread-date (filter thread-date (:threads dump)))
-        first-date  (-> (first threads) :request :date)
-        age-secs    (fn [t] (.between ChronoUnit/SECONDS first-date (-> t :request :date)))]
+  (let [thread-date   (fn [t] (-> t :request :date))
+        threads       (sort-by thread-date (filter thread-date (:threads dump)))
+        newest-thread (-> (last threads) :request :date)
+        secs          (fn [^LocalDateTime d]
+                        (.toEpochSecond d ZoneOffset/UTC))
+        age-secs      (fn [t] (- (secs newest-thread) (secs (-> t :request :date))))
+        age-duration  (fn [t] (Duration/parse (str "PT"(age-secs t) "S")))]
     (when (not-empty threads)
+      (println "")
       (println (ansi/style "OLDEST THREADS" :white))
       (doseq [t (take 5 threads)]
         (println "   " (str (age-secs t) "s") " " (:NAME t))))))
