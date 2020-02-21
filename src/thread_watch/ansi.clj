@@ -1,4 +1,3 @@
-#!/usr/bin/env -S bb -i -o
 (ns thread-watch.ansi)
 
 (def ESC \u001b)

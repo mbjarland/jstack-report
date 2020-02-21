@@ -1,12 +1,15 @@
 #!/bin/bash 
 
-cp src/thread_watch/ansi.clj ./jstack-report
-cat src/thread_watch/core.clj >> ./jstack-report
+SCRIPT="jstack-report"
 
-chmod +x jstack-report 
-sed -i 's/ns thread-watch.core/ns user/g' jstack-report
-echo "(report (dump *input*))" >> jstack-report
+rm "$SCRIPT"
+echo "#!/usr/bin/env -S bb -i -o" >> "$SCRIPT"
+cat src/thread_watch/ansi.clj src/thread_watch/core.clj >> "$SCRIPT"
 
-echo "babashka executable created at ./jstack-report"
+chmod +x "$SCRIPT" 
+sed -i 's/ns thread-watch.core/ns user/g' "$SCRIPT"
+echo "(report (dump *input*))" >> "$SCRIPT"
+
+echo "babashka executable created at $SCRIPT"
 echo ""
-echo "usage: cat thread-dump.txt | jstack-report"
+echo "usage: cat thread-dump.txt | $SCRIPT"

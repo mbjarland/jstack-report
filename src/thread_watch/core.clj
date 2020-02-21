@@ -1,4 +1,3 @@
-#!/usr/bin/env -S bb -i -o
 (ns thread-watch.core
   (:require [clojure.string :as str]
             [clojure.java.io :as jio]
