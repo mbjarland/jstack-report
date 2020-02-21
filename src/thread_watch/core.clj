@@ -567,7 +567,8 @@
         age-secs      (fn [t] (- (secs newest-thread) (secs (-> t :request :date))))]
     (when (not-empty threads)
       (println "")
-      (println (ansi/style (str threads-to-print " OLDEST REQUEST THREADS" :white)))
+      (println (ansi/style (str threads-to-print " OLDEST REQUEST THREADS") :white))
+      (println "")
       (doseq [t (take threads-to-print threads)]
         (println (format "%10s    %s" (display-time (age-secs t)) (:NAME t)))))))
 
