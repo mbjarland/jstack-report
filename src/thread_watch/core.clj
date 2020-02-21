@@ -558,7 +558,9 @@
         secs          (fn [^LocalDateTime d]
                         (.toEpochSecond d ZoneOffset/UTC))
         age-secs      (fn [t] (- (secs newest-thread) (secs (-> t :request :date))))
-        age-duration  (fn [t] (Duration/parse (str "PT"(age-secs t) "S")))]
+        age-duration  (fn [t] (let [d (Duration/parse (str "PT"(age-secs t) "S"))]
+                                (cond-:)
+                                      (not (zero? )))]
     (when (not-empty threads)
       (println "")
       (println (ansi/style "OLDEST THREADS" :white))
