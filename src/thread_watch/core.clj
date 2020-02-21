@@ -626,6 +626,22 @@
       (doseq [t top-x]
         (println (emphasis [:green] (format "    %4s lines" (count (:trace t)))) "  " (:NAME t))))))
 
+(defn print-urls-with-most-threads [dump threads-to-print]
+  (let [url-f   (fn [t] (-> t :request :url))
+        threads (filter url-f (:threads dump))
+        groups  (group-by url-f threads)
+        sorted  (sort-by
+                 (fn [[k v]] (- (count v)))
+                 (keep (fn [[k v]]
+                         (when (< 1 (count v)) [k v]))
+                       groups))
+        top-x   (take threads-to-print sorted)]
+    (when (not-empty top-x)
+      (println (emphasis [:white] "TOP " threads-to-print " REQUESTED URLS"))
+      (println "")
+      (doseq [[url threads] top-x]
+        (println "    " (emphasis [:green] (format "%3d" (count threads)) " threads ") url)))))
+
 (defn display-date [date]
   (.format (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss") date))
 
@@ -651,8 +667,9 @@
     (println "")
     (print-cids-with-multiple-requests dump 10)
     (println "")
-    (println "")
     (print-threads-with-longest-traces dump 10)
+    (println "")
+    (print-urls-with-most-threads dump 10)
     (println "")
 
     (println (ansi/style "********************************************" :bright :white))))
