@@ -126,6 +126,9 @@
   with its own style."
   []
   (doall
-    (map #(println (style (name %) %)) (sort-by name (keys ANSI-CODES))))
+    (map (fn [c]
+           (println (style (name c) c))
+           (println (style (str "bright " (name c)) :bright c)))
+         (sort-by name (keys ANSI-CODES))))
   nil)
 
