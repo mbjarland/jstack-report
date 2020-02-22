@@ -1,7 +1,7 @@
 (ns thread-watch.core
   (:require [clojure.string :as str]
             [clojure.java.io :as jio]
-            ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
+   ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
             [thread-watch.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
            [java.time LocalTime LocalDateTime ZoneOffset Duration]
@@ -83,13 +83,6 @@
    :epilogue             [:any :end]
    :end                  nil})
 
-(def fsm-partitioned
-  (reduce-kv
-    (fn [a k v]
-      (assoc a k (partition 2 v)))
-    {}
-    finite-state-machine))
-
 (def fsm-mapped
   (reduce-kv
     (fn [a k v]
@@ -121,15 +114,29 @@
 
 (defn next-state [old-state ^String line]
   (let [transitions (old-state fsm-mapped)
+        next-state  (loop [transition (first transitions) xs (rest transitions)]
+                      (let [pattern (:pattern transition)
+                            state   (:state transition)
+                            found   (or
+                                      (and (instance? String pattern) (str/starts-with? line pattern))
+                                      (= :any pattern)
+                                      (and (= :empty pattern) (= line "")))]
+                        (if found
+                          state
+                          (recur (first xs) (rest xs)))))]
+    (or next-state :undefined)))
+
+(defn next-state-2 [old-state ^String line]
+  (let [transitions (old-state fsm-mapped)
         next-state  (reduce
                       (fn [_ transition]
-                        (let [p (:pattern transition)
-                              n (:state transition)
-                              f (or
-                                  (and (string? p) (str/starts-with? line p))
-                                  (= :any p)
-                                  (and (= :empty p) (= line "")))]
-                          (when f (reduced n))))
+                        (let [pattern (:pattern transition)
+                              state   (:state transition)
+                              found   (or
+                                        (and (instance? String pattern) (str/starts-with? line pattern))
+                                        (= :any pattern)
+                                        (and (= :empty pattern) (= line "")))]
+                          (when found (reduced state))))
                       nil
                       transitions)]
     (or next-state :undefined)))
@@ -199,25 +206,31 @@
        :currently (currently line)
        :lines     [line]})))
 
+;   java.lang.Thread.State:
 (defn parse-block-second-line [rec line]
   "parses the second line of a thread block. The first argument is a map
    which will be used to assoc parsed values into.
    Example line: '   java.lang.Thread.State: WAITING (on object monitor)'"
-  (let [[_ state] (re-find #"   java.lang.Thread.State: (.+)" line)]
-    (assoc rec :thread-state state)))
+  (assoc rec :thread-state (subs line 27)))
 
 (defn parse-trace-element-line
-  [rec line]
+  [line]
   (let [[_ class method file-and-line] (re-find #"\tat ([^(]+)[.]([^(]+)\(([^)]+)\)" line)
-        [file line-#] (if (#{"Native Method" "Unknown Source" "<generated>"} file-and-line)
-                        [file-and-line nil]
-                        (str/split file-and-line #":"))]
-    (update rec :trace (fnil conj []) (assoc-if {:type   :stack-element
-                                                 :class  class
-                                                 :method method
-                                                 :file   file
-                                                 :line-# (some-> line-# Integer/parseInt)
-                                                 :line   line}))))
+        file-and-line (if (#{"Native Method" "Unknown Source" "<generated>"} file-and-line)
+                        {:file file-and-line}
+                        (let [r (str/split file-and-line #":")]
+                          {:file (first r) :line-# (second r)}))]
+    {:class  class
+     :method method
+     :file   (:file file-and-line)
+     :line-# (some-> (:line-# file-and-line) Integer/parseInt)}))
+
+(defn delayed-parse-trace-element-line
+  [rec line]
+  (update rec :trace (fnil conj [])
+    {:type    :stack-element
+     :line    line
+     :details (delay (parse-trace-element-line line))}))
 
 ; types
 ;- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)
@@ -232,29 +245,24 @@
   "parse one of the '\t- xxx' lines in the thread block stack trace"
   [m state line]
   (let [[_ oid class class-for] (re-find #".*<([^>]+)>(?: \(a ([^ )]+))?(?: for ([^ )]+))?" line)]
-    (update m :trace (fnil conj []) (assoc-if (state dash-types)
+    (update m :trace (fnil conj []) (assoc-if
+                                      (state dash-types)
                                       {:oid       oid
                                        :class     class
                                        :class-for class-for
                                        :line      line}))))
 
 (defn parse-block-line [rec state line]
-  (p :parse-block-line
-    (case state
-      :block-second (parse-block-second-line rec line)
-      :trace-element (parse-trace-element-line rec line)
-      ;;:owned-locks-start (update rec :lines conj "")
-      :locked (parse-dashed-line rec state line)
-      (:waiting-concurrent
-       :waiting-notify
-       :waiting-synchronized
-       :waiting-re-lock) (parse-dashed-line rec state line)
-      rec)))
-
-(defn parse-and-append [rec state line]
-  (-> rec
-    (parse-block-line state line)
-    (update :lines conj line)))
+  (case state
+    :block-second (parse-block-second-line rec line)
+    :trace-element (delayed-parse-trace-element-line rec line)
+    ;;:owned-locks-start (update rec :lines conj "")
+    :locked (parse-dashed-line rec state line)
+    (:waiting-concurrent
+     :waiting-notify
+     :waiting-synchronized
+     :waiting-re-lock) (parse-dashed-line rec state line)
+    rec))
 
 (defn display-duration [seconds]
   (let [zf (fn [n u] (if (= n 0) "" (str n u)))
@@ -282,10 +290,9 @@
                          :current-state state}))
     :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
     ;; default
-    (p :parse-line-update-in
-      (update-in m
-        [:threads (-> m :threads count dec)]                ;; update last thread in vec
-        #(parse-and-append % state line)))))
+    (update-in m
+      [:threads (-> m :threads count dec)]                  ;; update last thread in vec
+      #(parse-block-line % state line))))
 
 (defn parse-jstack-lines
   "main parsing method of this namespace, parses out the base
@@ -297,9 +304,10 @@
          prev-state :start
          line-#     1
          [line & xs] lines]
-    (let [state (p :next-state (next-state prev-state line))]
+    (let [state (next-state prev-state line)]
       (if (not= state :end)
-        (recur (p :parse-line (parse-line m state line line-#))
+        (recur
+          (parse-line m state line line-#)
           state
           (inc line-#)
           xs)
@@ -383,19 +391,19 @@
     (update dump :threads (partial decorate-thread-age newest-date))))
 
 (defn extract-lines [line-source]
-  (p :extract-lines
-    (cond
-      (seq? line-source) line-source
-      (instance? File line-source) (str/split-lines (slurp line-source))
-      (string? line-source) (str/split-lines (slurp (jio/file line-source)))
-      :else (throw (ex-info (str "unknown line source: " line-source) {:class (class line-source)})))))
+  (cond
+    (seq? line-source) line-source
+    (instance? File line-source) (str/split-lines (slurp line-source))
+    (string? line-source) (str/split-lines (slurp (jio/file line-source)))
+    :else (throw (ex-info (str "unknown line source: " line-source) {:class (class line-source)}))))
 
 (defn dump
   "main entry point to this namespace. Given a seq of lines from a jstack thread
   dump, produces a clojure data structure representing the thread dump. Example
   usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
   [line-source]
-  (-> (extract-lines line-source)
+  (->
+    (extract-lines line-source)
     (parse-jstack-lines)
     (update :threads #(map reconcile-locks %))
     (decorate-request-threads)))
@@ -621,7 +629,7 @@
         threads (filter cid-f (:threads dump))
         groups  (group-by cid-f threads)
         sorted  (sort-by
-                  (fn [[k v]] (- (count v)))
+                  (fn [[_ v]] (- (count v)))
                   (keep (fn [[k v]]
                           (when (< 1 (count v)) [k v]))
                     groups))
@@ -650,7 +658,7 @@
         threads (filter url-f (:threads dump))
         groups  (group-by url-f threads)
         sorted  (sort-by
-                  (fn [[k v]] (- (count v)))
+                  (fn [[_ v]] (- (count v)))
                   (keep (fn [[k v]]
                           (when (< 1 (count v)) [k v]))
                     groups))
@@ -693,11 +701,11 @@
 
     (println (ansi/style "********************************************" :bright :white))))
 
-(tufte/add-basic-println-handler! {})
-(defn profiled-report [dump-file]
-  (profile {}
-    (let [dump   (p :dump (dump dump-file))
-          report (p :report (report dump))])))
+;(tufte/add-basic-println-handler! {})
+;(defn profiled-report [dump-file]
+;  (profile {}
+;    (let [dump   (p :dump (dump dump-file))
+;          report (p :report (report dump))])))
 
 ;; transitive lock graph
 ;; dump time
