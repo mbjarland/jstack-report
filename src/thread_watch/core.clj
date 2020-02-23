@@ -1,11 +1,12 @@
 (ns thread-watch.core
   (:require [clojure.string :as str]
             [clojure.java.io :as jio]
-   ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
+    ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
             [thread-watch.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
            [java.time LocalTime LocalDateTime ZoneOffset Duration]
-           [java.io File]))
+           [java.io File Reader BufferedReader])
+  (:gen-class))
 
 ; namespace: jstack-tools
 ;
@@ -141,7 +142,7 @@
                       transitions)]
     (or next-state :undefined)))
 
-(defn emphasis [[& styles] & xs]
+(defn color [[& styles] & xs]
   (apply ansi/style (concat [(apply str xs)] styles)))
 
 (defn assoc-if
@@ -225,12 +226,12 @@
      :file   (:file file-and-line)
      :line-# (some-> (:line-# file-and-line) Integer/parseInt)}))
 
-(defn delayed-parse-trace-element-line
+(defn parse-trace-element-line-delayed
   [rec line]
   (update rec :trace (fnil conj [])
-    {:type    :stack-element
-     :line    line
-     :details (delay (parse-trace-element-line line))}))
+          {:type    :stack-element
+           :line    line
+           :details (delay (parse-trace-element-line line))}))
 
 ; types
 ;- locked <0x0000000644ce4f50> (a java.lang.ref.ReferenceQueue$Lock)
@@ -255,13 +256,13 @@
 (defn parse-block-line [rec state line]
   (case state
     :block-second (parse-block-second-line rec line)
-    :trace-element (delayed-parse-trace-element-line rec line)
+    :trace-element (parse-trace-element-line-delayed rec line)
     ;;:owned-locks-start (update rec :lines conj "")
     :locked (parse-dashed-line rec state line)
     (:waiting-concurrent
-     :waiting-notify
-     :waiting-synchronized
-     :waiting-re-lock) (parse-dashed-line rec state line)
+      :waiting-notify
+      :waiting-synchronized
+      :waiting-re-lock) (parse-dashed-line rec state line)
     rec))
 
 (defn display-duration [seconds]
@@ -281,18 +282,18 @@
 (defn parse-line [m state line line-#]
   (case state
     :prelude (cond-> m
-               (empty? (:prelude m)) (decorate-dump-date line)
-               true (update :prelude conj line))
+                     (empty? (:prelude m)) (decorate-dump-date line)
+                     true (update :prelude conj line))
     :epilogue (update m :epilogue conj line)
     :undefined (throw (ex-info "Encountered line with no defined state transition"
-                        {:line#         line-#
-                         :line          line
-                         :current-state state}))
+                               {:line#         line-#
+                                :line          line
+                                :current-state state}))
     :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
     ;; default
     (update-in m
-      [:threads (-> m :threads count dec)]                  ;; update last thread in vec
-      #(parse-block-line % state line))))
+               [:threads (-> m :threads count dec)]         ;; update last thread in vec
+               #(parse-block-line % state line))))
 
 (defn parse-jstack-lines
   "main parsing method of this namespace, parses out the base
@@ -317,12 +318,16 @@
   (let [result (filter (fn [lock] (not= (:oid lock) (:oid t))) locks)]
     (if (empty? result) nil result)))
 
-(defn extract-locks-and-wait [thread]
+(defn extract-locks-and-wait
+  "based on the parsed trace data for a thread, determines two properties
+   for the thread: what (if anything) it is waiting on and what locks it
+   is holding on to."
+  [thread]
   (reduce
     (fn [[locks wait-oid] te]
       (cond
         (and locks
-          (= (:wait-type te) :notify)) [(remove-waiting-on-lock locks te) wait-oid]
+             (= (:wait-type te) :notify)) [(remove-waiting-on-lock locks te) wait-oid]
         (#{:concurrent
            :synchronized
            :re-lock} (:wait-type te)) [locks {:oid (:oid te) :class (:class te) :wait-type (:wait-type te)}]
@@ -333,7 +338,7 @@
     (-> thread :trace reverse)))
 
 (defn reconcile-locks
-  "post procesing for a thread, walks through the trace of the thread and
+  "post processing for a thread, walks through the trace of the thread and
    assocs in two extra keys :locked [{:oid oid :class fqcn} ...] and
    :waiting-on {:oid od :class name} where the :locked vector is in temporal
    lock order, i.e. the first element in the vector was locked first"
@@ -342,7 +347,13 @@
     (assoc-if thread {:locked     locks
                       :waiting-on waiting-on})))
 
-(defn thread-date [dump-date time-str]
+(defn thread-date
+  "given a dump date as defined by the first line in the dump and
+  a time string from the thread name (format 025902.625 - HHmmSS.SSS),
+  parses the thread time into a LocalDateTime instance. Note that this
+  involves figuring out what day the time string belongs to as the time
+  string contains no date information"
+  [dump-date time-str]
   (when time-str
     (let [one-day    (Duration/ofDays 1)
           fluff      (Duration/ofSeconds date-roll-fluff-seconds)
@@ -353,16 +364,20 @@
         (.minus date one-day)
         date))))
 
-(defn decorate-request-thread [dump-date thread]
+(defn decorate-request-thread
+  "for request threads with the new improved thread naming convention
+   ajp|025902.625|cid=<x>|rid=<y>|<req url>, decorates in key :request
+   into the thread map containing parsed out properties for the request"
+  [dump-date thread]
   (let [pattern #"([^\\|]+)\|([^\\|]+)\|cid=([^\\|]+)\|rid=([^\\|]+)\|([^\\|]+)"
         [_ pre time cid rid url] (re-matches pattern (:NAME thread))]
     (if (or (= pre "ajp") (= pre "http"))
       (assoc thread :request (into (sorted-map)
-                               {:time time
-                                :date (thread-date dump-date time)
-                                :cid  cid
-                                :rid  rid
-                                :url  url}))
+                                   {:time time
+                                    :date (thread-date dump-date time)
+                                    :cid  cid
+                                    :rid  rid
+                                    :url  url}))
       thread)))
 
 (defn date->seconds [^LocalDateTime date]
@@ -371,30 +386,40 @@
 (defn seconds-between [^LocalDateTime new ^LocalDateTime old]
   (- (date->seconds new) (date->seconds old)))
 
+(defn req-date [t]
+  (-> t :request :date))
+
 (defn decorate-thread-age [newest-date threads]
-  (let [age-secs (fn [t] (seconds-between newest-date (-> t :request :date)))]
+  (let [age-secs (fn [t] (seconds-between newest-date (req-date t)))]
     (map
       (fn [t]
-        (if (-> t :request :date)
-          (-> t
-            (assoc-in [:request :age-seconds] (age-secs t))
-            (assoc-in [:request :display-age] (display-duration (age-secs t))))
+        (if (req-date t)
+          (let [secs (age-secs t)]
+            (-> t
+                (assoc-in [:request :age-seconds] secs)
+                (assoc-in [:request :display-age] (display-duration secs))))
           t))
       threads)))
 
-(defn decorate-request-threads [dump]
-  (let [decorator   (partial decorate-request-thread (:date dump))
-        dump        (update dump :threads #(map decorator %))
-        req-date    (fn [t] (-> t :request :date))
-        req-threads (sort-by req-date (filter req-date (:threads dump)))
-        newest-date (req-date (last req-threads))]
+(defn decorate-request-threads
+  "decorates request threads with a few keys based on the information
+  in the thread name"
+  [dump]
+  (let [req-decorator (partial decorate-request-thread (:date dump))
+        dump          (update dump :threads #(map req-decorator %))
+        req-threads   (sort-by req-date (filter req-date (:threads dump)))
+        newest-date   (req-date (last req-threads))]
     (update dump :threads (partial decorate-thread-age newest-date))))
 
-(defn extract-lines [line-source]
+(defn extract-lines
+  "given a line source (String, File, Reader, seq, ...) returns a lazy
+  seq of lines which will be used to parse the jstack data"
+  [line-source]
   (cond
     (seq? line-source) line-source
     (instance? File line-source) (str/split-lines (slurp line-source))
     (string? line-source) (str/split-lines (slurp (jio/file line-source)))
+    (instance? Reader line-source) (line-seq (BufferedReader. line-source))
     :else (throw (ex-info (str "unknown line source: " line-source) {:class (class line-source)}))))
 
 (defn dump
@@ -402,11 +427,10 @@
   dump, produces a clojure data structure representing the thread dump. Example
   usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
   [line-source]
-  (->
-    (extract-lines line-source)
-    (parse-jstack-lines)
-    (update :threads #(map reconcile-locks %))
-    (decorate-request-threads)))
+  (-> (extract-lines line-source)
+      (parse-jstack-lines)
+      (update :threads #(map reconcile-locks %))
+      (decorate-request-threads)))
 ;;
 ;; ANALYSIS FUNCTIONS
 ;; the below functions are used for analysing and working with
@@ -519,27 +543,27 @@
    (render-tree str compare key val))
   ([render-fn key-comp-f key val]
    (let [graph-color [:magenta]
-         I-short     (emphasis graph-color "│ ")
-         I-branch    (emphasis graph-color "│   ")
-         T-branch    (emphasis graph-color "├── ")
-         L-branch    (emphasis graph-color "└── ")
+         I-short     (color graph-color "│ ")
+         I-branch    (color graph-color "│   ")
+         T-branch    (color graph-color "├── ")
+         L-branch    (color graph-color "└── ")
          spacer      "    "
          pre         (if (pos? (count val)) I-short "")
          label       (render-fn key val)
          label       (cons (first label) (map #(str pre %) (rest label)))]
      (concat label
-       (mapcat
-         (fn [[c-key c-val] index]
-           (let [subtree      (render-tree render-fn key-comp-f c-key c-val)
-                 last?        (= index (dec (count val)))
-                 prefix-first (if last? L-branch T-branch)
-                 prefix-rest  (if last? spacer I-branch)]
-             (cons (str prefix-first (first subtree))
-               (map
-                 #(str prefix-rest %)
-                 (next subtree)))))
-         (into (sorted-map-by key-comp-f) val)
-         (range))))))
+             (mapcat
+               (fn [[c-key c-val] index]
+                 (let [subtree      (render-tree render-fn key-comp-f c-key c-val)
+                       last?        (= index (dec (count val)))
+                       prefix-first (if last? L-branch T-branch)
+                       prefix-rest  (if last? spacer I-branch)]
+                   (cons (str prefix-first (first subtree))
+                         (map
+                           #(str prefix-rest %)
+                           (next subtree)))))
+               (into (sorted-map-by key-comp-f) val)
+               (range))))))
 
 (defn keys-in [m]
   (if (map? m)
@@ -550,31 +574,38 @@
                   (if (seq nested)
                     nested
                     [[k]])))
-        m))
+              m))
     []))
 
 (defn short-name [fqn]
   (last (re-seq #"[^.]+" fqn)))
 
+(defn trace-has? [t [class method]]
+  (let [exists? (fn [p coll] (not (empty? (filter p coll))))
+        match?  (fn [e] (and (= (some-> e :details deref :class) class)
+                             (= (some-> e :details deref :method) method)))]
+    (exists? match? (:trace t))))
+
+(defn tx-reaper? [t]
+  (let [reaper-run ["com.arjuna.ats.internal.arjuna.coordinator.ReaperWorkerThread" "run"]]
+    (trace-has? t reaper-run)))
+
+(defn db-socket-read? [t]
+  (let [socket-read ["java.net.SocketInputStream" "socketRead0"]
+        oracle-read ["oracle.jdbc.driver.T4CSocketInputStreamWrapper" "read"]]
+    (and (trace-has? t socket-read)
+         (trace-has? t oracle-read))))
+
 (defn thread-extra-info [t]
-  (let [exists?     (fn [p coll] (not (empty? (filter p coll))))
-        match?      (fn [[c m]] (fn [e] (and (= (:class e) c) (= (:method e) m))))
-        trace       (:trace t)
-        trace-has?  (fn [v] (exists? (match? v) trace))
-        reaper-run  ["com.arjuna.ats.internal.arjuna.coordinator.ReaperWorkerThread" "run"]
-        socket-read ["java.net.SocketInputStream" "socketRead0"]
-        oracle-read ["oracle.jdbc.driver.T4CSocketInputStreamWrapper" "read"]
-        tx-reaper?  (trace-has? reaper-run)
-        db-read?    (and (trace-has? socket-read) (trace-has? oracle-read))
-        result      (cond
-                      tx-reaper? "[jboss tx reaper thread]"
-                      db-read? "[in db socketRead0]"
+  (let [result      (cond
+                      (tx-reaper? t) "[jboss tx reaper thread]"
+                      (db-socket-read? t) "[in db socketRead0]"
                       (< trace-limit (count (:trace t))) (str " [" (count (:trace t)) " line trace]")
                       :else nil)
         thread-age  (-> t :request :display-age)
         display-age (if thread-age (str "age " thread-age) "")]
     (if (or result display-age)
-      (str " " (emphasis [:magenta] display-age) (emphasis [:bright :black] result))
+      (str " " (color [:magenta] display-age) (color [:bright :black] result))
       nil)))
 
 (defn render-graph-node [threads-by-tid k m]
@@ -587,44 +618,57 @@
         bright      [:bright :cyan]
         second-line (when second?
                       (str
-                        (emphasis normal "tid " (:tid thread) " locked ")
-                        (emphasis bright (short-name class))
-                        (emphasis normal " " (:oid k) " - ")
-                        (emphasis bright "blocks " b-count " threads")))]
+                        (color normal "tid " (:tid thread) " locked ")
+                        (color bright (short-name class))
+                        (color normal " " (:oid k) " - ")
+                        (color bright "blocks " b-count " threads")))]
     (cond-> [(str (:NAME thread) extra)]
-      second? (conj second-line))))
+            second? (conj second-line))))
 
 (defn render-lock-graph
   ""
-  [dump]
-  (let [graph          (transitive-lock-graph dump)
-        threads-by-tid (threads-by-tid dump)
-        render-fn      (partial render-graph-node threads-by-tid)
-        name           (fn [tid] (:NAME (get threads-by-tid tid)))
-        key-comp-f     (fn [a b]
-                         (let [nc (compare (name (:tid a)) (name (:tid b)))]
-                           (if (zero? nc) (compare (:oid a) (:oid b)) nc)))]
-    (mapcat (fn [[k v]] (render-tree render-fn key-comp-f k v)) graph)))
+  ([dump]
+   (render-lock-graph dump (transitive-lock-graph dump)))
+  ([dump graph]
+   (let [threads-by-tid (threads-by-tid dump)
+         render-fn      (partial render-graph-node threads-by-tid)
+         name           (fn [tid] (:NAME (get threads-by-tid tid)))
+         key-comp-f     (fn [a b]
+                          (let [nc (compare (name (:tid a)) (name (:tid b)))]
+                            (if (zero? nc) (compare (:oid a) (:oid b)) nc)))]
+     (mapcat (fn [[k v]] (render-tree render-fn key-comp-f k v)) graph))))
 
-(defn print-lock-graph
-  [dump]
-  (let [graph (render-lock-graph dump)]
+(defn print-lock-graph [dump]
+  (let [graph (transitive-lock-graph dump)
+        lines (render-lock-graph dump)
+        count (count (distinct (flatten (keys-in graph))))]
     (if (empty? graph)
       (println "No transitive lock chains detected")
-      (doseq [line (render-lock-graph dump)]
-        (println line)))))
+      (do
+        (println (color [:white] "TRANSITIVE LOCK GRAPH (" count " threads)"))
+        (println "")
+        (doseq [line lines]
+          (println line))))))
 
 (defn print-oldest-threads [dump threads-to-print]
-  (let [thread-date (fn [t] (-> t :request :date))
-        threads     (sort-by thread-date (filter thread-date (:threads dump)))]
+  (let [threads (sort-by req-date (filter req-date (:threads dump)))]
     (when (not-empty threads)
       (println "")
-      (println (emphasis [:white] threads-to-print " OLDEST REQUEST THREADS"))
+      (println (color [:white] threads-to-print " OLDEST REQUEST THREADS"))
       (println "")
       (doseq [t (take threads-to-print threads)]
-        (println (emphasis [:green] (format "%10s" (-> t :request :display-age))) (:NAME t))))))
+        (println (color [:green] (format "%10s" (-> t :request :display-age))) (:NAME t))))))
 
-(defn print-cids-with-multiple-requests [dump cids-to-print]
+(defn print-youngest-threads [dump threads-to-print]
+  (let [threads (sort-by req-date (filter req-date (:threads dump)))]
+    (when (not-empty threads)
+      (println "")
+      (println (color [:white] threads-to-print " YOUNGEST REQUEST THREADS"))
+      (println "")
+      (doseq [t (reverse (take-last threads-to-print threads))]
+        (println (color [:green] (format "%10s" (-> t :request :display-age))) (:NAME t))))))
+
+(defn print-clients-with-most-requests [dump cids-to-print]
   (let [cid-f   (fn [t] (-> t :request :cid))
         threads (filter cid-f (:threads dump))
         groups  (group-by cid-f threads)
@@ -632,28 +676,30 @@
                   (fn [[_ v]] (- (count v)))
                   (keep (fn [[k v]]
                           (when (< 1 (count v)) [k v]))
-                    groups))
+                        groups))
         top-x   (take cids-to-print sorted)]
     (when (not-empty top-x)
-      (println (emphasis [:white] "TOP " cids-to-print " CLIENT IDS WITH MULTIPLE REQUESTS"))
+      (println "")
+      (println (color [:white] "TOP " cids-to-print " CLIENT IDS WITH MOST REQUESTS"))
       (println "")
       (doseq [[cid threads] top-x]
-        (println (emphasis [:green] "  cid " cid " - " (count threads) " threads"))
+        (println (color [:green] "  cid " cid " - " (count threads) " threads"))
         (doseq [t (sort-by (fn [t] (- (-> t :request :age-seconds))) threads)]
           (println "     "
-            (emphasis [:cyan] (format "%-10s" (str "age " (format "%6s" (-> t :request :display-age)))))
-            (:NAME t)))))))
+                   (color [:cyan] (format "%-10s" (str "age " (format "%6s" (-> t :request :display-age)))))
+                   (:NAME t)))))))
 
-(defn print-threads-with-longest-traces [dump threads-to-print]
+(defn print-longest-traces [dump threads-to-print]
   (let [threads (sort-by (fn [t] (- (count (:trace t)))) (:threads dump))
         top-x   (take threads-to-print threads)]
     (when (not-empty top-x)
-      (println (emphasis [:white] "TOP " threads-to-print " THREADS WITH LONGEST TRACES"))
+      (println "")
+      (println (color [:white] "TOP " threads-to-print " THREADS WITH LONGEST TRACES"))
       (println "")
       (doseq [t top-x]
-        (println (emphasis [:green] (format "    %4s lines" (count (:trace t)))) "  " (:NAME t))))))
+        (println (color [:green] (format "    %4s lines" (count (:trace t)))) "  " (:NAME t))))))
 
-(defn print-urls-with-most-threads [dump threads-to-print]
+(defn print-most-requested-urls [dump threads-to-print]
   (let [url-f   (fn [t] (-> t :request :url))
         threads (filter url-f (:threads dump))
         groups  (group-by url-f threads)
@@ -661,45 +707,63 @@
                   (fn [[_ v]] (- (count v)))
                   (keep (fn [[k v]]
                           (when (< 1 (count v)) [k v]))
-                    groups))
+                        groups))
         top-x   (take threads-to-print sorted)]
     (when (not-empty top-x)
-      (println (emphasis [:white] "TOP " threads-to-print " REQUESTED URLS"))
+      (println "")
+      (println (color [:white] "TOP " threads-to-print " REQUESTED URLS"))
       (println "")
       (doseq [[url threads] top-x]
-        (println "    " (emphasis [:green] (format "%3d" (count threads)) " threads ") url)))))
+        (println "    " (color [:green] (format "%3d" (count threads)) " threads ") url))
+      (println ""))))
 
-(defn display-date [date]
-  (.format (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss") date))
-
-(defn report [dump]
-  (let [threads    (:threads dump)
-        count-by   (fn [p] (count (filter p threads)))
-        trace-pred (fn [t] (< trace-limit (count (:trace t))))]
+(defn print-threads-in-db-socket-read [dump]
+  (let [threads (filter db-socket-read? (:threads dump))
+        count   (count threads)]
+    (println (color [:white] "THREADS WAITING ON DB IN SocketRead0 (" count " threads)"))
     (println "")
-    (println (ansi/style "************ THREAD DUMP REPORT ************" :bright :white))
+    (if (not-empty threads)
+      (doseq [t (sort-by :NAME threads)]
+        (let [age (or (-> t :request :display-age) "")]
+          (println "     "
+                   (color [:green] (format "%10s" age))
+                   (:NAME t))))
+      (println "   No threads in db socketRead0 detected!"))
+    (println "")))
+
+(defn print-stats [dump]
+  (let [threads      (:threads dump)
+        count-by     (fn [p] (count (filter p threads)))
+        trace-pred   (fn [t] (< trace-limit (count (:trace t))))
+        display-date (fn [d] (.format (DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss") d))
+        lock-waits   (count-by (fn [t] (= (-> t :waiting-on :wait-type) :synchronized)))
+        fg           [:green]]
     (println "")
     (println (ansi/style "STATISTICS" :white))
     (println "")
-    (println "jstack dump date:          " (display-date (:date dump)))
-    (println "total threads:             " (count threads))
-    (println "threads waiting for locks: " (count-by (fn [t] (= (-> t :waiting-on :wait-type) :synchronized))))
-    (println "request threads:           " (count-by :request))
-    (println "traces >" trace-limit "lines:        " (count-by trace-pred))
+    (println "jstack dump date:          " (color fg (display-date (:date dump))))
+    (println "total threads:             " (color fg (count threads)))
+    (println "threads waiting for locks: " (color fg lock-waits))
+    (println "request threads:           " (color fg (count-by :request)))
+    (println "traces >" trace-limit "lines:        " (color fg (count-by trace-pred)))
+    (println "")))
+
+(defn report [dump]
+  (let [header-fg [:bright :white]]
     (println "")
-    (println (ansi/style "TRANSITIVE LOCK GRAPH" :white))
-    (println "")
+    (println (color header-fg "************ THREAD DUMP REPORT ************"))
+    (print-stats dump)
     (print-lock-graph dump)
     (print-oldest-threads dump 10)
-    (println "")
-    (print-cids-with-multiple-requests dump 10)
-    (println "")
-    (print-threads-with-longest-traces dump 10)
-    (println "")
-    (print-urls-with-most-threads dump 10)
-    (println "")
+    (print-youngest-threads dump 10)
+    (print-clients-with-most-requests dump 5)
+    (print-longest-traces dump 10)
+    (print-most-requested-urls dump 10)
+    (print-threads-in-db-socket-read dump)
+    (println (color header-fg "********************************************"))))
 
-    (println (ansi/style "********************************************" :bright :white))))
+(defn -main [& args]
+  (report (dump *in*)))
 
 ;(tufte/add-basic-println-handler! {})
 ;(defn profiled-report [dump-file]
