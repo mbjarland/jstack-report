@@ -734,10 +734,14 @@
     (println "")
     (if (not-empty threads)
       (doseq [t (sort-by :NAME threads)]
-        (let [age (or (-> t :request :display-age) "")]
+        (let [age (or (-> t :request :display-age) "")
+              isValid (if (db-socket-read-is-valid? t)
+                        (color [:bright :black] "[in isValid]")
+                        "")]
           (println "     "
                    (color [:green] (format "%10s" age))
-                   (:NAME t))))
+                   (:NAME t)
+                   isValid)))
       (println "   No threads in db socketRead0 detected!"))
     (println "")))
 
