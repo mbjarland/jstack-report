@@ -1,4 +1,4 @@
-(ns thread-watch.classes
+(ns jstack-report.classes
   {:no-doc true}
   (:require
    [cheshire.core :as json]

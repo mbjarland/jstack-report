@@ -1,13 +1,12 @@
-(ns thread-watch.core
+(ns jstack-report.core
   (:require [clojure.string :as str]
             [clojure.java.io :as jio]
    ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
-            [thread-watch.ansi :as ansi])
+            [jstack-report.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
            [java.time LocalTime LocalDateTime ZoneOffset Duration]
            [java.io File Reader BufferedReader]
-           [clojure.lang LineNumberingPushbackReader])
-  (:gen-class))
+           [clojure.lang LineNumberingPushbackReader]))
 
 ; namespace: jstack-tools
 ;
@@ -423,8 +422,8 @@
   "main entry point to this namespace. Given a seq of lines from a jstack thread
   dump, produces a clojure data structure representing the thread dump. Example
   usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
-  [line-source]
-  (-> (extract-lines line-source)
+  [reader]
+  (-> (line-seq reader)
       (parse-jstack-lines)
       (update :threads #(map reconcile-locks %))
       (decorate-request-threads)))
@@ -731,6 +730,7 @@
 (defn print-threads-in-db-socket-read [dump]
   (let [threads (filter db-socket-read? (:threads dump))
         count   (count threads)]
+    (println "")
     (println (color [:white] "THREADS WAITING ON DB IN SocketRead0 (" count " threads)"))
     (println "")
     (if (not-empty threads)
@@ -773,10 +773,13 @@
     (print-threads-in-db-socket-read dump)
     (println (color header-fg "********************************************"))))
 
-(defn -main [& args]
-  (when (and (instance? LineNumberingPushbackReader *in*)
-             (.ready *in*))
-    (report (dump *in*))))
+(defn jstack-report [opts]
+  (let [source (or (:file opts) *in*)]
+    (with-open [reader (jio/reader source)]
+      (binding [ansi/*use-ansi* (not (:no-color opts))]
+               (if (.ready reader)
+                 (report (dump reader))
+                 (println "no lines - skipping report (-h for help)"))))))
 
 ;(tufte/add-basic-println-handler! {})
 ;(defn profiled-report [dump-file]

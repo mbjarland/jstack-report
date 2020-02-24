@@ -1,4 +1,4 @@
-(ns thread-watch.ansi)
+(ns jstack-report.ansi)
 
 (def ESC \u001b)
 
