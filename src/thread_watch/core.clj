@@ -605,7 +605,10 @@
         thread-age  (-> t :request :display-age)
         display-age (if thread-age (str "age " thread-age) "")]
     (if (or result display-age)
-      (str " " (color [:magenta] display-age) (color [:bright :black] result))
+      (str " "
+           (color [:magenta] display-age)
+           (if (and result display-age) " " "")
+           (color [:bright :black] result))
       nil)))
 
 (defn render-graph-node [threads-by-tid k m]
