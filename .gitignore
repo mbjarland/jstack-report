@@ -12,4 +12,4 @@ pom.xml.asc
 /.idea
 /thread-dumps
 reflection.json
-
+.rebel_readline_history
