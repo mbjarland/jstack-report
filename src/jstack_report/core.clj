@@ -5,8 +5,7 @@
             [jstack-report.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
            [java.time LocalTime LocalDateTime ZoneOffset Duration]
-           [java.io File Reader BufferedReader]
-           [clojure.lang LineNumberingPushbackReader]))
+           [java.io File Reader BufferedReader]))
 
 ; namespace: jstack-tools
 ;
