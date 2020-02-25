@@ -38,14 +38,12 @@
   ([options-summary]
    (usage options-summary []))
   ([options-summary extra]
+   (let [[sha date] (str/split (:git-build build) #"/")]
    (str/join
     \newline
     (concat
      [""
-      (str/join " " ["jstack-report"
-                     "-"
-                     (-> build :version)
-                     (-> build :git-build)])
+      (str "jstack-report " (:version build) " - (C) 2020 Iteego AB / Matias Bjarland")
       ""
       "A utility to analyze jstack thread dumps"
       ""
@@ -55,13 +53,15 @@
       ""
       "Usage: cat thread_dump.txt | jstack-report"
       ""
-      "jstack-report defaults to reading from stdin, i.e. the"
-      "second usage example above."
+      "Defaults to reading from stdin, i.e. the second usage example"
+      "above."
       ""
       "Options:"
       options-summary
+      ""
+      (str "build " sha " " (subs date 0 10))
       ""]
-     extra))))
+     extra)))))
 
 (defn error-msg [errors]
   (str "Errors:\n\n"
