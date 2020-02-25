@@ -4,9 +4,13 @@
    ;         [jstack-report.cli :as cli]
    [clojure.java.io :as jio]
    [clojure.string :as str]
-   [clojure.tools.cli :refer [parse-opts]])
+   [clojure.tools.cli :refer [parse-opts]]
+   [say-cheez.core :refer [current-build-env capture-build-env-to]])
   (:import [java.io File Reader])
   (:gen-class))
+
+(def build (current-build-env))
+;(def BUILD (current-build-env))
 
 (def cli-options
   ;; An option with a required argument
@@ -38,6 +42,11 @@
     \newline
     (concat
      [""
+      (str/join " " ["jstack-report"
+                     "-"
+                     (-> build :version)
+                     (-> build :git-build)])
+      ""
       "A utility to analyze jstack thread dumps"
       ""
       "Usage: jstack-report -f <jstack-thread-dump-file>"

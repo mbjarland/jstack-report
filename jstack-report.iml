@@ -26,6 +26,7 @@
     <orderEntry type="library" name="Leiningen: org.clojure/core.specs.alpha:0.2.44" level="project" />
     <orderEntry type="library" name="Leiningen: org.clojure/spec.alpha:0.2.176" level="project" />
     <orderEntry type="library" name="Leiningen: org.clojure/tools.cli:1.0.194" level="project" />
+    <orderEntry type="library" name="Leiningen: say-cheez:0.2.0" level="project" />
     <orderEntry type="library" name="Leiningen: tigris:0.1.2" level="project" />
   </component>
 </module>

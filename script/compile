@@ -27,7 +27,7 @@ lein with-profiles +reflection do run
 lein do clean, uberjar
 
 $GRAALVM_HOME/bin/native-image \
-  -jar target/jstack-report-0.1.0-SNAPSHOT-standalone.jar \
+  -jar target/jstack-report-0.1.0-standalone.jar \
   -H:Name=jstack-report \
   -H:+ReportExceptionStackTraces \
   -J-Dclojure.spec.skip-macros=true \

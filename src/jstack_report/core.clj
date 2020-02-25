@@ -5,7 +5,7 @@
             [jstack-report.ansi :as ansi])
   (:import [java.time.format DateTimeFormatter]
            [java.time LocalTime LocalDateTime ZoneOffset Duration]
-           [java.io File Reader BufferedReader]))
+           [java.io File Reader BufferedReader StringReader]))
 
 ; namespace: jstack-tools
 ;
@@ -417,15 +417,51 @@
     (instance? Reader line-source) (line-seq (BufferedReader. line-source))
     :else (throw (ex-info (str "unknown line source: " line-source) {:class (class line-source)}))))
 
-(defn dump
-  "main entry point to this namespace. Given a seq of lines from a jstack thread
-  dump, produces a clojure data structure representing the thread dump. Example
-  usage: (def my-dump (dump (str/split-lines (slurp \"dump.txt\"))))."
+(defn source-type
+  "dispatch function for the dump multi-method, returns a keyword
+  indicating the type of line-source sent in to the dump function"
+  [line-source]
+  (cond
+    (seq? line-source) :seq
+    (vector? line-source) :seq
+    (instance? File line-source) :file
+    (string? line-source) :string
+    (instance? Reader line-source) :reader
+    :else (throw (ex-info (str "unknown line source: " line-source)
+                          {:class (class line-source)}))))
+
+(defmulti
+ dump
+ "main entry point to this namespace. Given a line source (sequence of lines,
+  string which is either a path to a file or the data, File, or Reader) with a set
+  of lines from a jstack thread dump, produces a clojure data structure representing
+  the thread dump. Example usage: (def my-dump (dump (\"dump.txt\")))."
+ {:arglists '[[line-source]]}
+ source-type)
+
+(defmethod dump :file
+  [file]
+  (with-open [rdr (jio/reader file)]
+    (dump rdr)))
+
+(defmethod dump :string
+  [str]
+    (with-open [rdr (jio/reader str)]
+      (dump rdr)))
+
+(defmethod dump :reader
   [reader]
-  (-> (line-seq reader)
+  (if (instance? BufferedReader reader)
+    (dump (line-seq reader))
+    (dump (line-seq (BufferedReader. reader)))))
+
+(defmethod dump :seq
+  [lines]
+  (-> lines
       (parse-jstack-lines)
       (update :threads #(map reconcile-locks %))
       (decorate-request-threads)))
+
 ;;
 ;; ANALYSIS FUNCTIONS
 ;; the below functions are used for analysing and working with
@@ -601,21 +637,18 @@
     (and (db-socket-read? t)
          (trace-has? t valid-connection))))
 
+(defn thread-display-age [t]
+  (let [age (-> t :request :dipsplay-age)]
+    (when age (str "age " age))))
+
 (defn thread-extra-info [t]
-  (let [result      (cond
-                      (tx-reaper? t) "[jboss tx reaper thread]"
-                      (db-socket-read-is-valid? t) "[db socketRead0 isValid]"
-                      (db-socket-read? t) "[db socketRead0]"
-                      (< trace-limit (count (:trace t))) (str " [" (count (:trace t)) " line trace]")
-                      :else nil)
-        thread-age  (-> t :request :display-age)
-        display-age (if thread-age (str "age " thread-age) "")]
-    (if (or result display-age)
-      (str " "
-           (color [:magenta] display-age)
-           (if (and result display-age) " " "")
-           (color [:bright :black] result))
-      nil)))
+  (let [result (cond
+                 (tx-reaper? t) "[jboss tx reaper thread]"
+                 (db-socket-read-is-valid? t) "[db socketRead0 isValid]"
+                 (db-socket-read? t) "[db socketRead0]"
+                 (< trace-limit (count (:trace t))) (str " [" (count (:trace t)) " line trace]")
+                 :else nil)]
+    (when result (color [:bright :black] result))))
 
 (defn render-graph-node [threads-by-tid k m]
   (let [thread      (get threads-by-tid (:tid k))
@@ -623,6 +656,7 @@
         class       (first (keep (fn [{:keys [oid class]}] (when (= oid (:oid k)) class)) (:locked thread)))
         b-count     (count (distinct (flatten (keys-in m))))
         extra       (thread-extra-info thread)
+        age         (thread-display-age thread)
         normal      [:green]
         bright      [:bright :cyan]
         second-line (when second?
@@ -631,7 +665,7 @@
                        (color bright (short-name class))
                        (color normal " " (:oid k) " - ")
                        (color bright "blocks " b-count " threads")))]
-    (cond-> [(str (:NAME thread) extra)]
+    (cond-> [(str (:NAME thread) (str age (when (and age extra) " ") extra))]
             second? (conj second-line))))
 
 (defn render-lock-graph
@@ -734,7 +768,7 @@
     (println "")
     (if (not-empty threads)
       (doseq [t (sort-by :NAME threads)]
-        (let [age (or (-> t :request :display-age) "")
+        (let [age     (or (-> t :request :display-age) "")
               isValid (if (db-socket-read-is-valid? t)
                         (color [:bright :black] "[in isValid]")
                         "")]
