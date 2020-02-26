@@ -496,7 +496,7 @@
     (fn [a t]
       (if (:locked t)
         (reduce
-          (fn [a2 {:keys [oid]}] (assoc a2 oid t))          ;;@@@
+          (fn [a2 {:keys [oid]}] (assoc a2 oid t))
           a
           (:locked t))
         a))
@@ -541,11 +541,30 @@
         (vec (reverse p))
         (recur (:tid locker) (conj p locker))))))
 
+(defn keys-in [m]
+  (if (map? m)
+    (vec
+      (mapcat (fn [[k v]]
+                (let [sub    (keys-in v)
+                      nested (map #(into [k] %) (filter (comp not empty?) sub))]
+                  (if (seq nested)
+                    nested
+                    [[k]])))
+              m))
+    []))
+
+(defn key-count-in [m]
+  (if (map? m)
+    (count (distinct (flatten (keys-in m))))
+    0))
+
 (defn sorted-map-by-subtree [m]
   (into (sorted-map-by
           (fn [key1 key2]
-            (compare [(get m key2) key2]
-                     [(get m key1) key1])))))
+            (compare [(key-count-in (get m key2)) key2]
+                     [(key-count-in (get m key1)) key1])))
+        m))
+
 (defn transitive-lock-graph
   "returns a map {tidA {tidB {tidC nil tidD nil}}} where
   threads C and D are waiting for a lock held by thread B and
@@ -601,18 +620,6 @@
                (into (sorted-map-by key-comp-f) val)
                (range))))))
 
-(defn keys-in [m]
-  (if (map? m)
-    (vec
-      (mapcat (fn [[k v]]
-                (let [sub    (keys-in v)
-                      nested (map #(into [k] %) (filter (comp not empty?) sub))]
-                  (if (seq nested)
-                    nested
-                    [[k]])))
-              m))
-    []))
-
 (defn short-name [fqn]
   (last (re-seq #"[^.]+" fqn)))
 
@@ -659,7 +666,7 @@
   (let [thread      (get threads-by-tid (:tid k))
         second?     (pos? (count m))
         class       (first (keep (fn [{:keys [oid class]}] (when (= oid (:oid k)) class)) (:locked thread)))
-        b-count     (count (distinct (flatten (keys-in m))))
+        b-count     (key-count-in m)
         extra       (thread-extra-info thread)
         age         (thread-display-age thread)
         normal      [:green]
@@ -689,7 +696,7 @@
 (defn print-lock-graph [dump]
   (let [graph (transitive-lock-graph dump)
         lines (render-lock-graph dump)
-        count (count (distinct (flatten (keys-in graph))))]
+        count (key-count-in graph)]
     (if (empty? graph)
       (println "No transitive lock chains detected")
       (do
