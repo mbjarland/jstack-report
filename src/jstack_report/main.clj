@@ -59,7 +59,7 @@
       "Options:"
       options-summary
       ""
-      (str "build " sha " " (subs date 0 10))
+      (str "build " sha " " date)
       ""]
      extra)))))
 
