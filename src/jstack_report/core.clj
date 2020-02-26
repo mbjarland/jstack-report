@@ -652,7 +652,7 @@
          (trace-has? t valid-connection))))
 
 (defn thread-display-age [t]
-  (let [age (-> t :request :dipsplay-age)]
+  (let [age (-> t :request :display-age)]
     (when age (str "age " age))))
 
 (defn thread-extra-info [t]
