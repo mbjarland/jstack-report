@@ -561,8 +561,8 @@
 (defn sorted-map-by-subtree [m]
   (into (sorted-map-by
           (fn [key1 key2]
-            (compare (key-count-in (get m key2))
-                     (key-count-in (get m key1)))))
+            (compare [(key-count-in (get m key2)) (str key1)]
+                     [(key-count-in (get m key1)) (str key2)])))
         m))
 
 (defn transitive-lock-graph
