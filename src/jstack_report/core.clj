@@ -558,11 +558,11 @@
     (count (distinct (flatten (keys-in m))))
     0))
 
-(defn sorted-map-by-subtree [m]
+(defn sorted-map-by-subtree [m key-comp-fn]
   (into (sorted-map-by
           (fn [key1 key2]
-            (compare [(key-count-in (get m key2)) (str key1)]
-                     [(key-count-in (get m key1)) (str key2)])))
+            (compare [(key-count-in (get m key2)) (key-comp-fn key1)]
+                     [(key-count-in (get m key1)) (key-comp-fn key2)])))
         m))
 
 (defn transitive-lock-graph
@@ -578,20 +578,22 @@
   (let [waiters-by-tid (waiters-by-tid dump)
         waiters-by-oid (waiters-by-oid dump)
         threads        (filter :waiting-on (:threads dump))
-        paths          (distinct (map #(transitive-path waiters-by-tid %) threads))]
-    (reduce
-      (fn [a path]
-        (reduce
-          (fn [a2 waiter-tid]
-            (let [keys        (keys (get-in a2 path))
-                  tid-exists? (first (filter #(= (:tid %) waiter-tid) keys))]
-              (if tid-exists?
-                a2
-                (assoc-in a2 (conj path {:tid waiter-tid}) nil))))
-          a
-          (get waiters-by-oid (:oid (last path)))))
-      (sorted-map-by-subtree {})
-      (reverse (sort-by count paths)))))
+        paths          (distinct (map #(transitive-path waiters-by-tid %) threads))
+        sort-graph     (fn [m] (sorted-map-by-subtree m #(vector (:tid %) (:oid %))))]
+    (sort-graph
+      (reduce
+        (fn [a path]
+          (reduce
+            (fn [a2 waiter-tid]
+              (let [keys        (keys (get-in a2 path))
+                    tid-exists? (first (filter #(= (:tid %) waiter-tid) keys))]
+                (if tid-exists?
+                  a2
+                  (assoc-in a2 (conj path {:tid waiter-tid}) nil))))
+            a
+            (get waiters-by-oid (:oid (last path)))))
+        {}
+        (reverse (sort-by count paths))))))
 
 (defn render-tree
   ([key val]
