@@ -62,7 +62,8 @@
    :prelude              ["\"" :block-start
                           :any :prelude]
    :block-start          ["   java.lang.Thread.State:" :block-second
-                          :empty :block-end]
+                          :empty :block-end
+                          "\"" :block-start]  ;; special case, a one line block without an empty line after
    :block-second         block-transitions
    :trace-element        block-transitions
    :locked               block-transitions
@@ -660,6 +661,7 @@
     (tx-reaper? t) "[jboss tx reaper thread]"
     (db-socket-read-is-valid? t) "[db socketRead0 isValid]"
     (db-socket-read? t) "[db socketRead0]"
+
     (< trace-report-limit (count (:trace t))) (str "[" (count (:trace t)) " line trace]")
     :else nil))
 
@@ -809,6 +811,33 @@
     (println "request threads:           " (color fg (count-by :request)))
     (println "traces >" trace-report-limit "lines:        " (color fg (count-by trace-pred)))
     (println "")))
+
+(defn longest-common-prefix
+  "given two collections, returns a vector containing the
+  common prefix of the collections, i.e. the values at the
+  start of coll-a and coll-b which are equal"
+  [coll-a coll-b]
+  (reduce
+   (fn [v [a b]]
+     (if (= a b) (conj v a) (reduced v)))
+   []
+   (map vector coll-a coll-b)))
+
+(defn threads-by-common-trace [threads]
+  (loop [a {} [t & ts] threads]
+    (if ts
+      (recur
+       (reduce
+        (fn [a2 t2]
+          (let [c (longest-common-prefix (:trace t) (:trace t2))]
+            (if (not-empty c)
+              (update a2 c (fnil conj #{}) (:tid t) (:tid t2))
+              a2)))
+        a
+        ts)
+       ts)
+      a)))
+
 
 (defn report [dump]
   (let [header-fg [:bright :white]]
