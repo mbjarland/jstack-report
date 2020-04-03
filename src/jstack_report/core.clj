@@ -389,7 +389,7 @@
       (when (= lhs token) rhs))))
 
 (defn parse-thread-name [name]
-  (let [parts (.split name "\\|")
+  (let [parts (str/split name #"\|")
         extract (fn [token] (first (keep (thread-name-part token) parts)))]
     (when (< 1 (count parts))
       {:pre (first parts)
