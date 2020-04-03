@@ -383,19 +383,41 @@
         (.minus date one-day)
         date))))
 
+(defn thread-name-part [token]
+  (fn [part]
+    (let [[_ lhs rhs] (re-find #"([^=]+)=([^=]+)" part)]
+      (when (= lhs token) rhs))))
+
+(defn parse-thread-name [name]
+  (let [parts (.split name "\\|")
+        extract (fn [token] (first (keep (thread-name-part token) parts)))]
+    (when (< 1 (count parts))
+      {:pre (first parts)
+       :time (nth parts 1)
+       :cid (extract "cid")
+       :rid (extract "rid")
+       :oip (extract "oip")
+       :url (last parts)})))
+
+; ("ajp"
+; "125034.018"
+; "cid=lU8ZNBjPdX"
+; "rid=lY6aupnv3Z"
+; "oip=47.39.173.80"
+; "g/commerce/locations/StoreLocatorActor/locateItems")
 (defn decorate-request-thread
   "for request threads with the new improved thread naming convention
    ajp|025902.625|cid=<x>|rid=<y>|<req url>, decorates in key :request
    into the thread map containing parsed out properties for the request"
   [dump-date thread]
-  (let [pattern #"([^\\|]+)\|([^\\|]+)\|cid=([^\\|]+)\|rid=([^\\|]+)\|([^\\|]+)"
-        [_ pre time cid rid url] (re-matches pattern (:NAME thread))]
+  (let [{:keys [pre time cid rid oip url]} (parse-thread-name (:NAME thread))]
     (if (or (= pre "ajp") (= pre "http"))
       (assoc thread :request (into (sorted-map)
                                    {:time time
                                     :date (thread-date dump-date time)
                                     :cid  cid
                                     :rid  rid
+                                    :oip  oip
                                     :url  url}))
       thread)))
 
