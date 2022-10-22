@@ -50,7 +50,7 @@
      \newline
      (concat
        [""
-        (str "jstack-report " (version-string) " - (C) 2020 Matias Bjarland")
+        (str "jstack-report - a tool to analyze lock chains in jvm thread dumps")
         ""
         "A utility to analyze jstack thread dumps"
         ""
@@ -66,6 +66,11 @@
         "Options:"
         options-summary
         ""
+        ""
+        "Author: Matias Bjarland / mbjarland@gmail.com"
+        "        Copyright (c) 2022 - Iteego AB"
+        ""
+        (str "jstack-report" (version-string))
         ""]
        extra))))
 
@@ -99,14 +104,23 @@
   (println msg)
   (System/exit status))
 
-(defn -main [& args]
+(defn main-entrypoint [hard-exit-on-errors? [& args]]
   (let [{:keys [action options exit-message ok?]} (validate-args args)]
     (if exit-message
-      (exit (if ok? 0 1) exit-message)
+      (if hard-exit-on-errors?
+        (do (println exit-message) (System/exit (if ok? 0 1)))
+        (println "would exit with code " (if ok? 0 1) "msg," exit-message))
       (core/jstack-report options))))
 
+(defn -main [& args]
+  (main-entrypoint true args))
+
+(defn repl-main [& args]
+  (main-entrypoint false args))
+
+
 (comment
-  (-main ["--help"])
+  (repl-main "-h")
 
   )
 

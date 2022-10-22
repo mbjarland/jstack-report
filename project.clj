@@ -22,4 +22,5 @@
   ;:clean-targets ^{:protect false} [:target-path "gen-resources"]
   :git-version {:version-file      "gen-resources/build/version.edn"
                 :version-file-keys [:ref :version :timestamp :dirty? :ref-short]}
+  :resource-paths ["resources" "gen-resources"]
   :java-source-paths ["java"])
