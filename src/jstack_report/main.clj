@@ -52,13 +52,11 @@
        [""
         (str "jstack-report - a tool to analyze lock chains in jvm thread dumps")
         ""
-        "A utility to analyze jstack thread dumps"
-        ""
-        "Usage: jstack-report -f <jstack-thread-dump-file>"
+        "usage: java -jar jstack-report-1.0.0.jar -f <jstack-thread-dump-file>"
         ""
         "or"
         ""
-        "Usage: cat thread_dump.txt | jstack-report"
+        "usage: cat thread_dump.txt | java -jar jstack-report-1.0.0.jar"
         ""
         "Defaults to reading from stdin, i.e. the second usage example"
         "above."
@@ -68,9 +66,8 @@
         ""
         ""
         "Author: Matias Bjarland / mbjarland@gmail.com"
-        "        Copyright (c) 2022 - Iteego AB"
         ""
-        (str "jstack-report" (version-string))
+        (str "jstack-report " (version-string))
         ""]
        extra))))
 
@@ -108,7 +105,7 @@
   (let [{:keys [action options exit-message ok?]} (validate-args args)]
     (if exit-message
       (if hard-exit-on-errors?
-        (do (println exit-message) (System/exit (if ok? 0 1)))
+        (exit (if ok? 0 1) exit-message)
         (println "would exit with code " (if ok? 0 1) "msg," exit-message))
       (core/jstack-report options))))
 
