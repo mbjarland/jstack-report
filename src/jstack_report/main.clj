@@ -1,16 +1,24 @@
 (ns jstack-report.main
-  (:require
-   [jstack-report.core :as core]
-   ;         [jstack-report.cli :as cli]
-   [clojure.java.io :as jio]
-   [clojure.string :as str]
-   [clojure.tools.cli :refer [parse-opts]]
-   [say-cheez.core :refer [current-build-env capture-build-env-to]])
-  (:import [java.io File Reader])
+  (:require [clojure.edn :as edn]
+            [clojure.java.io :as jio]
+            [clojure.string :as str]
+            [clojure.tools.cli :refer [parse-opts]]
+            [jstack-report.core :as core])
+  (:import [java.io File PushbackReader Reader]
+           [java.text SimpleDateFormat]
+           [java.util Date])
   (:gen-class))
 
-(def build (current-build-env))
-;(def BUILD (current-build-env))
+(defn version-string []
+  (with-open [io-reader (jio/reader (or (jio/resource "build/version.edn")
+                                        (jio/file "gen-resources/build/version.edn")))
+              pb-reader (PushbackReader. io-reader)]
+    (let [{:keys [timestamp ref-short version dirty?]} (edn/read pb-reader)
+          dev-timestamp (str (Math/round ^Double (/ (System/currentTimeMillis) 1000.0)))
+          timestamp     (parse-long (or timestamp dev-timestamp))
+          format        (SimpleDateFormat. "yyyy.MM.dd HH:mm:ss")
+          date          (.format format (Date. ^Long (* timestamp 1000)))]
+      (str version " - " ref-short " - " date (if dirty? " +" "")))))
 
 (def cli-options
   ;; An option with a required argument
@@ -38,30 +46,28 @@
   ([options-summary]
    (usage options-summary []))
   ([options-summary extra]
-   (let [[sha date] (str/split (:git-build build) #"/")]
    (str/join
-    \newline
-    (concat
-     [""
-      (str "jstack-report " (:version build) " - (C) 2020 Iteego AB / Matias Bjarland")
-      ""
-      "A utility to analyze jstack thread dumps"
-      ""
-      "Usage: jstack-report -f <jstack-thread-dump-file>"
-      ""
-      "or"
-      ""
-      "Usage: cat thread_dump.txt | jstack-report"
-      ""
-      "Defaults to reading from stdin, i.e. the second usage example"
-      "above."
-      ""
-      "Options:"
-      options-summary
-      ""
-      (str "build " sha " " date)
-      ""]
-     extra)))))
+     \newline
+     (concat
+       [""
+        (str "jstack-report " (version-string) " - (C) 2020 Matias Bjarland")
+        ""
+        "A utility to analyze jstack thread dumps"
+        ""
+        "Usage: jstack-report -f <jstack-thread-dump-file>"
+        ""
+        "or"
+        ""
+        "Usage: cat thread_dump.txt | jstack-report"
+        ""
+        "Defaults to reading from stdin, i.e. the second usage example"
+        "above."
+        ""
+        "Options:"
+        options-summary
+        ""
+        ""]
+       extra))))
 
 (defn error-msg [errors]
   (str "Errors:\n\n"
@@ -99,8 +105,9 @@
       (exit (if ok? 0 1) exit-message)
       (core/jstack-report options))))
 
-;(when (and (instance? LineNumberingPushbackReader *in*)
-;           (.ready *in*))
-;  (report (dump *in*))))
+(comment
+  (-main ["--help"])
+
+  )
 
 

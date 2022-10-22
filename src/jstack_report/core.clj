@@ -1,35 +1,33 @@
-(ns jstack-report.core
-  (:require [clojure.string :as str]
-            [clojure.java.io :as jio]
+(ns ^{:doc "The central namespace for jstack-report
+
+ This namespace contains utilities for dealing with
+ thread dump output produced by the java jstack tool.
+
+ The main entry point in this namespace is the parse-jstack
+ function which takes as input a sequence of lines and
+ returns as output a clojure map which contains the jstack
+ output in a clojure data structure.
+
+ A typical usage might look like this:
+
+   ~> java -jar java -jar target/jstack-report-0.1.0-standalone.jar -f thread-dumps/
+   (ns user (:require [jstack-tools :as jt]))
+
+   (jt/parse-jstack *in*)
+
+ where *in* is bound by babashka to a sequence of input
+ lines."
+      :author "Matias Bjarland"}
+
+  jstack-report.core
+  (:require [clojure.java.io :as jio]
+            [clojure.string :as str]
     ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
             [jstack-report.ansi :as ansi])
-  (:import [java.time.format DateTimeFormatter]
-           [java.time LocalTime LocalDateTime ZoneOffset Duration]
-           [java.io File Reader BufferedReader StringReader]))
+  (:import [java.io BufferedReader File Reader]
+           [java.time Duration LocalDateTime LocalTime ZoneOffset]
+           [java.time.format DateTimeFormatter]))
 
-; namespace: jstack-tools
-;
-; This namespace contains utilities for dealing with
-; thread dump output produced by the java jstack tool.
-;
-; The main entry point in this namespace is the parse-jstack
-; function which takes as input a sequence of lines and
-; returns as output a clojure map which contains the jstack
-; output in a clojure data structure.
-;
-; A typical usage (from babashka) might look like this:
-;
-;   #!/usr/bin/env bb -i -o --classpath "bb-common"
-;   (ns user (:require [jstack-tools :as jt]))
-;
-;   (jt/parse-jstack *in*)
-;
-; where *in* is bound by babashka to a sequence of input
-; lines.
-
-;; the below two defs define a line based state machine to
-;; parse jstack output. A state machine approach is a robust
-;; and transparent way to parse the jstack output
 
 ; TODO:
 ;   -
@@ -44,6 +42,11 @@
 
 (def trace-report-limit 250)
 (def date-roll-fluff-seconds 5)
+
+; the below two defs define a line based state machine to
+; parse jstack output. A state machine approach is a robust
+; and transparent way to parse the jstack output
+
 
 ;; define common block transitions
 (def block-transitions
@@ -205,10 +208,11 @@
 ; https://dzone.com/articles/how-to-read-a-thread-dump
 ; https://gist.github.com/rednaxelafx/843622
 ; "Reference Handler" #2 daemon prio=10 os_prio=0 cpu=48.14ms elapsed=268568.18s tid=0x00007f4e7c102000 nid=0x7248 waiting on condition  [0x00007f4e6818f000]
-(defn parse-block-first-line [line]
+(defn parse-block-first-line
   "Parses the first line of the thread block. The first argument is a map
    which will be used to assoc parsed values into, typically an empty map.
    Example line: '\"RMI TCP Connection(idle)\" daemon prio=10 tid=0x0000000050977800 nid=0x34d waiting on condition [0x00002b7b25bab000]'"
+  [line]
   (let [prop (partial first-line-prop line)]
     (assoc-if
       {:NAME      (thread-name line)
@@ -224,10 +228,11 @@
        :lines     [line]})))
 
 ;   java.lang.Thread.State:
-(defn parse-block-second-line [rec line]
+(defn parse-block-second-line
   "parses the second line of a thread block. The first argument is a map
    which will be used to assoc parsed values into.
    Example line: '   java.lang.Thread.State: WAITING (on object monitor)'"
+  [rec line]
   (assoc rec :thread-state (subs line 27)))
 
 (defn parse-trace-element-line
@@ -271,15 +276,15 @@
 
 (defn parse-block-line [rec state line]
   (case state
-    :block-second (parse-block-second-line rec line)
-    :trace-element (parse-trace-element-line-delayed rec line)
-    ;;:owned-locks-start (update rec :lines conj "")
-    :locked (parse-dashed-line rec state line)
-    (:waiting-concurrent
-      :waiting-notify
-      :waiting-synchronized
-      :waiting-re-lock) (parse-dashed-line rec state line)
-    rec))
+        :block-second (parse-block-second-line rec line)
+        :trace-element (parse-trace-element-line-delayed rec line)
+        ;;:owned-locks-start (update rec :lines conj "")
+        :locked (parse-dashed-line rec state line)
+        (:waiting-concurrent
+          :waiting-notify
+          :waiting-synchronized
+          :waiting-re-lock) (parse-dashed-line rec state line)
+        rec))
 
 (defn display-duration [seconds]
   (let [zf (fn [n u] (if (= n 0) "" (str n u)))
@@ -297,22 +302,22 @@
 
 (defn parse-line [m state line line-#]
   (case state
-    :prelude (cond-> m
-                     (empty? (:prelude m)) (decorate-dump-date line)
-                     true (update :prelude conj line))
-    :epilogue (update m :epilogue conj line)
-    :undefined (throw (ex-info (str "error on line "
-                                    line-#
-                                    " - no state transition defined for line:\n"
-                                    line)
-                               {:line#         line-#
-                                :line          line
-                                :current-state state}))
-    :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
-    ;; default
-    (update-in m
-               [:threads (-> m :threads count dec)]         ;; update last thread in vec
-               #(parse-block-line % state line))))
+        :prelude (cond-> m
+                         (empty? (:prelude m)) (decorate-dump-date line)
+                         true (update :prelude conj line))
+        :epilogue (update m :epilogue conj line)
+        :undefined (throw (ex-info (str "error on line "
+                                        line-#
+                                        " - no state transition defined for line:\n"
+                                        line)
+                                   {:line#         line-#
+                                    :line          line
+                                    :current-state state}))
+        :block-start (update m :threads conj (parse-block-first-line line)) ;; add new thread in vec
+        ;; default
+        (update-in m
+                   [:threads (-> m :threads count dec)]     ;; update last thread in vec
+                   #(parse-block-line % state line))))
 
 (defn parse-jstack-lines
   "main parsing method of this namespace, parses out the base
@@ -389,15 +394,15 @@
       (when (= lhs token) rhs))))
 
 (defn parse-thread-name [name]
-  (let [parts (str/split name #"\|")
+  (let [parts   (str/split name #"\|")
         extract (fn [token] (first (keep (thread-name-part token) parts)))]
     (when (< 1 (count parts))
-      {:pre (first parts)
+      {:pre  (first parts)
        :time (nth parts 1)
-       :cid (extract "cid")
-       :rid (extract "rid")
-       :oip (extract "oip")
-       :url (last parts)})))
+       :cid  (extract "cid")
+       :rid  (extract "rid")
+       :oip  (extract "oip")
+       :url  (last parts)})))
 
 ; ("ajp"
 ; "125034.018"
@@ -663,7 +668,7 @@
   (last (re-seq #"[^.]+" fqn)))
 
 (defn trace-has? [t [class method]]
-  (let [exists? (fn [p coll] (not (empty? (filter p coll))))
+  (let [exists? (fn [p coll] (seq (filter p coll)))
         match?  (fn [e] (and (= (some-> e :details deref :class) class)
                              (= (some-> e :details deref :method) method)))]
     (exists? match? (:trace t))))
@@ -894,9 +899,9 @@
   (let [source (or (:file opts) *in*)]
     (with-open [reader (jio/reader source)]
       (binding [ansi/*use-ansi* (not (:no-color opts))]
-               (if (.ready reader)
-                 (report (dump reader))
-                 (println "no lines - skipping report (-h for help)"))))))
+        (if (.ready reader)
+          (report (dump reader))
+          (println "no lines - skipping report (-h for help)"))))))
 
 ;(tufte/add-basic-println-handler! {})
 ;(defn profiled-report [dump-file]

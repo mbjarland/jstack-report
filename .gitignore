@@ -13,3 +13,7 @@ pom.xml.asc
 /thread-dumps
 reflection.json
 .rebel_readline_history
+.nrepl-port
+.clj-kondo/
+gen-resources
+

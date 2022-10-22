@@ -3,35 +3,35 @@
 (def ESC \u001b)
 
 (def ANSI-CODES
-  {:reset              "[0m"
-   :bright             "[1m"
-   :blink-slow         "[5m"
-   :underline          "[4m"
-   :underline-off      "[24m"
-   :inverse            "[7m"
-   :inverse-off        "[27m"
-   :strikethrough      "[9m"
-   :strikethrough-off  "[29m"
+  {:reset             "[0m"
+   :bright            "[1m"
+   :blink-slow        "[5m"
+   :underline         "[4m"
+   :underline-off     "[24m"
+   :inverse           "[7m"
+   :inverse-off       "[27m"
+   :strikethrough     "[9m"
+   :strikethrough-off "[29m"
 
-   :default "[39m"
-   :white   "[37m"
-   :black   "[30m"
-   :red     "[31m"
-   :green   "[32m"
-   :blue    "[34m"
-   :yellow  "[33m"
-   :magenta "[35m"
-   :cyan    "[36m"
+   :default           "[39m"
+   :white             "[37m"
+   :black             "[30m"
+   :red               "[31m"
+   :green             "[32m"
+   :blue              "[34m"
+   :yellow            "[33m"
+   :magenta           "[35m"
+   :cyan              "[36m"
 
-   :bg-default "[49m"
-   :bg-white   "[47m"
-   :bg-black   "[40m"
-   :bg-red     "[41m"
-   :bg-green   "[42m"
-   :bg-blue    "[44m"
-   :bg-yellow  "[43m"
-   :bg-magenta "[45m"
-   :bg-cyan    "[46m"
+   :bg-default        "[49m"
+   :bg-white          "[47m"
+   :bg-black          "[40m"
+   :bg-red            "[41m"
+   :bg-green          "[42m"
+   :bg-blue           "[44m"
+   :bg-yellow         "[43m"
+   :bg-magenta        "[45m"
+   :bg-cyan           "[46m"
    })
 
 (def ^:dynamic *use-ansi* "Rebind this to false if you don't want to see ANSI codes in some part of your code." true)
@@ -55,17 +55,17 @@
   (cursor-fn "[" n "D"))
 
 (defn cursor-clear-display
-	"clear screen, move to 0, 0"
+  "clear screen, move to 0, 0"
   []
   (cursor-fn "[2j"))
 
 (defn cursor-clear-line []
   (cursor-fn "[2j"))
 
-(defn cursor-save [] 
+(defn cursor-save []
   (cursor-fn "[s"))
 
-(defn cursor-restore [] 
+(defn cursor-restore []
   (cursor-fn "[s"))
 
 (defn ansi

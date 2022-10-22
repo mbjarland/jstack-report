@@ -2,7 +2,7 @@
 
 SCRIPT="jstack-report"
 
-rm "$SCRIPT"
+rm -f "$SCRIPT"
 echo "#!/usr/bin/env -S bb -i -o" >> "$SCRIPT"
 cat src/jstack_report/ansi.clj src/jstack_report/core.clj >> "$SCRIPT"
 
