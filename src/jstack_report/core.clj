@@ -10,7 +10,10 @@
 
  A typical usage might look like this:
 
-   ~> java -jar java -jar target/jstack-report-0.1.0-standalone.jar -f thread-dumps/
+   ~> java -jar target/jstack-report-0.1.0-standalone.jar -f thread-dumps/
+
+ or using babashka:
+
    (ns user (:require [jstack-tools :as jt]))
 
    (jt/parse-jstack *in*)
