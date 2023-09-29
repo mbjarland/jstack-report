@@ -27,7 +27,7 @@ A an example, lets assume we have a java server process and the following flow o
 
 As you can see from this simple example this quickly gets very complex. In this parcilar example we have four threads and it is already getting hard to keep track of who is holding what and what the root cause of the cascading issue is (ORANGE being locked indefinitely and thread X not completing its job for some reason). 
 
-If we were to draw this acyclic graph using text, we might come out with something like this: 
+If we were to draw this acyclic graph using ascii graphics, we might come out with something like this: 
 
 ```
 TRANSITIVE LOCK GRAPH (4 threads)
