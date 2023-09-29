@@ -25,7 +25,7 @@ A an example, lets assume we have a java server process and the following flow o
 * a client request on thread **B** comes in to the server, it locks resource **BANANA** and then tries to lock resource **APPLE**. APPLE is already locked which leaves thread B waiting to lock it. 
 * a client request on thread C comes in to the server and tries to lock resource **BANANA**...
 
-As you can see from this simple example this quickly gets very complex. In this parcilar example we have three threads and it is already getting hard to keep track of who is holding what and what the root cause of the cascading issue is (ORANGE being locked indefinitely or at least for a long time). 
+As you can see from this simple example this quickly gets very complex. In this parcilar example we have four threads and it is already getting hard to keep track of who is holding what and what the root cause of the cascading issue is (ORANGE being locked indefinitely and thread X not completing its job for some reason). 
 
 If we were to draw this acyclic graph using text, we might come out with something like this: 
 
