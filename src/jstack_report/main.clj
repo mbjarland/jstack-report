@@ -56,7 +56,7 @@
         ""
         "or"
         ""
-        ("usage: cat thread_dump.txt | java -jar jstack-report-1.0.0.jar")
+        "usage: cat thread_dump.txt | java -jar jstack-report-1.0.0.jar"
         ""
         "Defaults to reading from stdin, i.e. the second usage example"
         "above."

@@ -10,7 +10,7 @@
 
  A typical usage might look like this:
 
-   ~> java -jar target/jstack-report-0.1.0-standalone.jar -f thread-dumps/
+   ~> java -jar target/jstack-report-0.1.0-standalone.jar -f thread-dumps/some-thread-dump.txt
 
  or using babashka:
 
@@ -50,6 +50,8 @@
 ; parse jstack output. A state machine approach is a robust
 ; and transparent way to parse the jstack output
 
+;;; ***********************************************
+;;; PARSING STATE MACHINE
 
 ;; define common block transitions
 (def block-transitions
@@ -104,7 +106,7 @@
     {}
     finite-state-machine))
 
-;; we map the the different types of lock / wait lines to maps with :type and :wait-type keys
+;; we map the different types of lock / wait lines to maps with :type and :wait-type keys
 (def dash-types
   {:locked               {:type :locked}                    ; \t- locked <0x000000066c425080>
    :eliminated           {:type :eliminated}                ; a redundant lock eliminated by the jvm
@@ -143,8 +145,8 @@
                             (recur xs)))))]
     (or next-state :undefined)))
 
-;; ***********************************************
-;; A few utility methods
+;;; ***********************************************
+;;; A few utility methods
 
 (defn color [[& styles] & xs]
   (when (not-empty xs)

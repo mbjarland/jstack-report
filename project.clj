@@ -1,12 +1,12 @@
 (defproject jstack-report "1.0.0"
   :description "jstack-report - a tool for analyzing jstack thread dumps"
-  :url "http://example.com/FIXME"
+  :url "https://github.com/mbjarland/jstack-report"
   :license {:name "Eclipse Public License"
             :url  "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.11.1"]
                  ;[com.taoensso/tufte "2.1.0"]
-                 [org.clojure/tools.cli "1.0.214"]
-                 [cheshire "5.11.0"]                        ;; required for graalvm generation of reflection.json
+                 [org.clojure/tools.cli "1.0.219"]
+                 [cheshire "5.12.0"]                        ;; required for graalvm generation of reflection.json
                  [say-cheez "0.2.0"]]                       ;;build information
 
   :repl-options {:init-ns jstack-report.core}
