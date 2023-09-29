@@ -7,7 +7,7 @@
 
 jstack-report - a tool for visualizing the transitive lock graph of a java thread dump
 
-![sample report](https://raw.githubusercontent.com/mbjarland/jstack-report/master/doc/doc/sample_jstack_report.png)
+![sample report](https://raw.githubusercontent.com/mbjarland/jstack-report/master/doc/sample_jstack_report.png)
 
 ## Why is something like this needed?
 In long running server side java processes you sometimes end up with either a fully broken JVM or a JVM which slowly crawls to a stop as more requests come in and old ones fail to be processed in a timely fashion. This can typically happen in complex enterprise applications with a lot of network/file access and wich are glued together from a large number of libraries and dependencies. This can also happen for various reasons in simpler situations, but I've personally typically seen this behaviour in complex enterprise settings. 
