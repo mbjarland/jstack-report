@@ -34,39 +34,9 @@
    :bg-cyan           "[46m"
    })
 
-(def ^:dynamic *use-ansi* "Rebind this to false if you don't want to see ANSI codes in some part of your code." true)
-
-(defn- cursor-fn [& args]
-  (print (str ESC (apply str args))))
-
-(defn cursor-pos [x y]
-  (cursor-fn "[" y "," x "H"))
-
-(defn cursor-up [n]
-  (cursor-fn "[" n "A"))
-
-(defn cursor-down [n]
-  (cursor-fn "[" n "B"))
-
-(defn cursor-right [n]
-  (cursor-fn "[" n "C"))
-
-(defn cursor-left [n]
-  (cursor-fn "[" n "D"))
-
-(defn cursor-clear-display
-  "clear screen, move to 0, 0"
-  []
-  (cursor-fn "[2j"))
-
-(defn cursor-clear-line []
-  (cursor-fn "[2j"))
-
-(defn cursor-save []
-  (cursor-fn "[s"))
-
-(defn cursor-restore []
-  (cursor-fn "[s"))
+(def ^:dynamic *use-ansi*
+  "Rebind to false to suppress ANSI codes (e.g. when piping to a file)."
+  true)
 
 (defn ansi
   "Output an ANSI escape code using a style key.

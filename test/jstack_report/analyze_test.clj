@@ -72,11 +72,3 @@
         by (fn [n] (first (filter #(= n (:NAME %)) (:threads d))))]
     (is (boolean (core/tx-reaper? (by "tx-reaper"))))
     (is (not (core/tx-reaper? (by "plain-worker"))))))
-
-;; ---------------------------------------------------------------------------
-;; Longest common prefix helper
-
-(deftest longest-common-prefix-vector-out
-  (is (= [1 2 3]   (core/longest-common-prefix [1 2 3 4] [1 2 3 9])))
-  (is (= []        (core/longest-common-prefix [1] [2])))
-  (is (= [:a]      (core/longest-common-prefix [:a :b] [:a :c]))))

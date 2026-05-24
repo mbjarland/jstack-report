@@ -25,23 +25,10 @@
   jstack-report.core
   (:require [clojure.java.io :as jio]
             [clojure.string :as str]
-    ;[taoensso.tufte :as tufte :refer (defnp p profiled profile)]
             [jstack-report.ansi :as ansi])
   (:import [java.io BufferedReader File Reader]
            [java.time Duration LocalDateTime LocalTime ZoneOffset]
            [java.time.format DateTimeFormatter]))
-
-
-; TODO:
-;   -
-;   - top blocker threads
-;   - lock type counts (transaction etc)
-;   - number of threads
-;   - longest running threads
-;   - graph extract extra info reaper | socketRead0
-; elsewhere:
-;   - connection counting servlet url -> [req count, conn count]
-;   - long running query sql logging
 
 (def trace-report-limit 250)
 (def date-roll-fluff-seconds 5)
@@ -453,17 +440,6 @@
         newest-date   (req-date (last req-threads))]
     (update dump :threads (partial decorate-thread-age newest-date))))
 
-(defn extract-lines
-  "given a line source (String, File, Reader, seq, ...) returns a lazy
-  seq of lines which will be used to parse the jstack data"
-  [line-source]
-  (cond
-    (seq? line-source) line-source
-    (instance? File line-source) (str/split-lines (slurp line-source))
-    (string? line-source) (str/split-lines (slurp (jio/file line-source)))
-    (instance? Reader line-source) (line-seq (BufferedReader. line-source))
-    :else (throw (ex-info (str "unknown line source: " line-source) {:class (class line-source)}))))
-
 (defn source-type
   "dispatch function for the dump multi-method, returns a keyword
   indicating the type of line-source sent in to the dump function"
@@ -521,16 +497,6 @@
   [dump]
   (reduce
     (fn [a t] (assoc a (:tid t) t))
-    (sorted-map)
-    (:threads dump)))
-
-(defn threads-by-name
-  "returns a map {thread-name thread ...} where thread is the
-  map structure representing a thread in the dump. The argument
-  dump is a map as returned by the dump function"
-  [dump]
-  (reduce
-    (fn [a t] (assoc a (:NAME t) t))
     (sorted-map)
     (:threads dump)))
 
@@ -857,35 +823,6 @@
     (println "traces >" trace-report-limit "lines:        " (color fg (count-by trace-pred)))
     (println "")))
 
-(defn longest-common-prefix
-  "given two collections, returns a vector containing the
-  common prefix of the collections, i.e. the values at the
-  start of coll-a and coll-b which are equal"
-  [coll-a coll-b]
-  (reduce
-    (fn [v [a b]]
-      (if (= a b) (conj v a) (reduced v)))
-    []
-    (map vector coll-a coll-b)))
-
-(defn threads-by-common-trace [threads]
-  (loop [a {} [t & ts] threads]
-    (prn :size (count a) :tid (:tid t))
-    (if t
-      (recur
-        (reduce
-          (fn [a2 t2]
-            (let [c (longest-common-prefix (map :line (:trace t))
-                                           (map :line (:trace t2)))]
-              (if (not-empty c)
-                (update a2 c (fnil conj #{}) (:tid t) (:tid t2))
-                a2)))
-          a
-          ts)
-        ts)
-      a)))
-
-
 (defn report [dump]
   (let [header-fg [:bright :white]]
     (println "")
@@ -907,22 +844,3 @@
         (if (.ready reader)
           (report (dump reader))
           (println "no lines - skipping report (-h for help)"))))))
-
-;(tufte/add-basic-println-handler! {})
-;(defn profiled-report [dump-file]
-;  (profile {}
-;    (let [dump   (p :dump (dump dump-file))
-;          report (p :report (report dump))])))
-
-;; transitive lock graph
-;; dump time
-;; total number of threads
-;; number of blocked threads
-;; number of request threads
-;; oldest threads with age
-;;
-;;   - top blocker threads
-;   - lock type counts (transaction etc)
-;   - number of threads
-;   - longest running threads
-;   - graph extract extra info reaper | socketRead0
