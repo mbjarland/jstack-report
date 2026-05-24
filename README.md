@@ -1,7 +1,7 @@
 # jstack-report
 
 [![CI](https://github.com/mbjarland/jstack-report/actions/workflows/ci.yml/badge.svg)](https://github.com/mbjarland/jstack-report/actions)
-[![Version](https://img.shields.io/badge/version-1.0.0-brightgreen)](https://img.shields.io/badge/version-1.0.0-brightgreen)
+[![Version](https://img.shields.io/badge/version-1.1.0-brightgreen)](https://img.shields.io/badge/version-1.1.0-brightgreen)
 [![License](https://img.shields.io/badge/License-EPL_2.0-green.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
 **jstack-report** turns a `jstack` thread dump into a one-screen
@@ -105,16 +105,16 @@ lein test       # run the suite
 lein uberjar    # produce the standalone jar
 ```
 
-The uberjar lands at `target/jstack-report-1.0.0-standalone.jar`.
+The uberjar lands at `target/jstack-report-1.1.0-standalone.jar`.
 
 ## Running
 
 Two equivalent invocations:
 
 ```bash
-java -jar target/jstack-report-1.0.0-standalone.jar -f <thread-dump.txt>
+java -jar target/jstack-report-1.1.0-standalone.jar -f <thread-dump.txt>
 
-cat <thread-dump.txt> | java -jar target/jstack-report-1.0.0-standalone.jar
+cat <thread-dump.txt> | java -jar target/jstack-report-1.1.0-standalone.jar
 ```
 
 If no `-f` is given, the tool reads from stdin.
@@ -122,7 +122,7 @@ If no `-f` is given, the tool reads from stdin.
 A shell alias makes daily use less verbose:
 
 ```bash
-alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.0.0-standalone.jar'
+alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.1.0-standalone.jar'
 jstack-report -f <thread-dump.txt>
 ```
 
