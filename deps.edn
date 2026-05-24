@@ -1,0 +1,48 @@
+{:paths ["src" "gen-resources"]
+ :deps  {org.clojure/clojure       {:mvn/version "1.11.4"}
+         org.clojure/tools.cli     {:mvn/version "1.0.219"}
+         cheshire/cheshire         {:mvn/version "5.13.0"}}
+
+ :aliases
+ {;; ---------------------------------------------------------------
+  ;; Run the tool directly from sources (no jar build needed):
+  ;;   clojure -M:run -f <dump.txt>
+  :run
+  {:main-opts ["-m" "jstack-report.main"]}
+
+  ;; ---------------------------------------------------------------
+  ;; Run the tests:
+  ;;   clojure -M:test
+  :test
+  {:extra-paths ["test" "test/resources"]
+   :extra-deps  {io.github.cognitect-labs/test-runner
+                 {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+   :main-opts   ["-m" "cognitect.test-runner"]
+   :exec-fn     cognitect.test-runner.api/test}
+
+  ;; ---------------------------------------------------------------
+  ;; Phase-by-phase benchmark:
+  ;;   clojure -M:bench thread-dumps/<dump.txt> [runs]
+  :bench
+  {:extra-paths ["dev"]
+   :jvm-opts    ["-server"]
+   :main-opts   ["-m" "jstack-report.bench"]}
+
+  ;; ---------------------------------------------------------------
+  ;; REPL with test + bench sources on the classpath.
+  :dev
+  {:extra-paths ["dev" "test" "test/resources"]
+   :extra-deps  {io.github.cognitect-labs/test-runner
+                 {:git/tag "v0.5.1" :git/sha "dfb30dd"}}}
+
+  ;; ---------------------------------------------------------------
+  ;; Build the standalone uberjar:
+  ;;   clojure -T:build uber
+  ;; Also exposes `clean` and `test`:
+  ;;   clojure -T:build clean
+  ;;   clojure -T:build test
+  :build
+  {:deps       {io.github.clojure/tools.build
+                {:git/tag "v0.10.5" :git/sha "2a21b7a"}}
+   :paths      ["."]
+   :ns-default build}}}

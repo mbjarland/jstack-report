@@ -1,7 +1,7 @@
 # jstack-report
 
 [![CI](https://github.com/mbjarland/jstack-report/actions/workflows/ci.yml/badge.svg)](https://github.com/mbjarland/jstack-report/actions)
-[![Version](https://img.shields.io/badge/version-1.2.0-brightgreen)](https://img.shields.io/badge/version-1.2.0-brightgreen)
+[![Version](https://img.shields.io/badge/version-1.3.0-brightgreen)](https://img.shields.io/badge/version-1.3.0-brightgreen)
 [![License](https://img.shields.io/badge/License-EPL_2.0-green.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
 **jstack-report** turns a `jstack` thread dump into a one-screen
@@ -97,24 +97,31 @@ the request-thread sections simply skip them.
 
 ## Installation / building
 
-Requires Java (tested against 11, 17, 21) and
-[Leiningen](https://leiningen.org/).
+Requires Java (tested against 11, 17, 21) and the
+[Clojure CLI](https://clojure.org/guides/install_clojure).
 
 ```bash
-lein test       # run the suite
-lein uberjar    # produce the standalone jar
+clojure -M:test          # run the suite
+clojure -T:build uber    # produce the standalone jar
 ```
 
-The uberjar lands at `target/jstack-report-1.2.0-standalone.jar`.
+The uberjar lands at `target/jstack-report-1.3.0-standalone.jar`.
+
+You can also run the tool directly from sources without building,
+which is handy during development:
+
+```bash
+clojure -M:run -f <thread-dump.txt>
+```
 
 ## Running
 
 Two equivalent invocations:
 
 ```bash
-java -jar target/jstack-report-1.2.0-standalone.jar -f <thread-dump.txt>
+java -jar target/jstack-report-1.3.0-standalone.jar -f <thread-dump.txt>
 
-cat <thread-dump.txt> | java -jar target/jstack-report-1.2.0-standalone.jar
+cat <thread-dump.txt> | java -jar target/jstack-report-1.3.0-standalone.jar
 ```
 
 If no `-f` is given, the tool reads from stdin.
@@ -122,7 +129,7 @@ If no `-f` is given, the tool reads from stdin.
 A shell alias makes daily use less verbose:
 
 ```bash
-alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.2.0-standalone.jar'
+alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.3.0-standalone.jar'
 jstack-report -f <thread-dump.txt>
 ```
 
@@ -194,11 +201,25 @@ owned ownable synchronizers), a wide root-blocking-many fan-out, and
 the trace patterns the `socketRead0` and `tx-reaper` predicates key on.
 
 ```bash
-lein test
+clojure -M:test
 ```
 
 CI runs the same suite across JDK 11, 17, and 21 on every push and PR
 to `master`.
+
+## Benchmarking
+
+A phase-by-phase wall-clock benchmark lives at
+`dev/jstack_report/bench.clj`. Useful when you're touching the parser
+or analysis hot paths and want to check the impact:
+
+```bash
+clojure -M:bench <thread-dump.txt> [runs]
+```
+
+The harness warms the JVM once, then reports min/avg/max for each
+layer of the pipeline (parse, reconcile, indexes, graph, render,
+report).
 
 ## License
 

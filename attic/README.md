@@ -26,3 +26,10 @@ GraalVM `native-image` build script. Was never wired into CI, references
 the old `jstack-report-0.1.0` jar name, and assumes a `GRAALVM_HOME`
 pointing at a JDK with `native-image` installed. Kept for whoever wants
 to revive the native binary route.
+
+## `project.clj`
+
+The Leiningen project file from before the switch to deps.edn +
+tools.build (v1.3.0). Useful as a reference if you want to add a lein
+target back, or to remind yourself how the `:reflection` /
+`lein-git-version` plumbing was configured.

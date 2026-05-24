@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # lein-git-version needs the full history
+          fetch-depth: 0          # build.clj reads the git ref for version.edn
 
       - name: Set up JDK ${{ matrix.jdk }}
         uses: actions/setup-java@v4
@@ -25,10 +25,10 @@ jobs:
           distribution: temurin
           java-version: ${{ matrix.jdk }}
 
-      - name: Set up Clojure / Leiningen
+      - name: Set up Clojure CLI
         uses: DeLaGuardo/setup-clojure@13.0
         with:
-          lein: latest
+          cli: latest
 
       - name: Cache Clojure deps
         uses: actions/cache@v4
@@ -37,11 +37,11 @@ jobs:
             ~/.m2/repository
             ~/.gitlibs
             ~/.deps.clj
-          key: clj-${{ runner.os }}-${{ hashFiles('project.clj') }}
+          key: clj-${{ runner.os }}-${{ hashFiles('deps.edn') }}
           restore-keys: clj-${{ runner.os }}-
 
       - name: Run tests
-        run: lein test
+        run: clojure -M:test
 
   build:
     name: Build uberjar
@@ -58,10 +58,10 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Set up Clojure / Leiningen
+      - name: Set up Clojure CLI
         uses: DeLaGuardo/setup-clojure@13.0
         with:
-          lein: latest
+          cli: latest
 
       - name: Cache Clojure deps
         uses: actions/cache@v4
@@ -70,11 +70,11 @@ jobs:
             ~/.m2/repository
             ~/.gitlibs
             ~/.deps.clj
-          key: clj-${{ runner.os }}-${{ hashFiles('project.clj') }}
+          key: clj-${{ runner.os }}-${{ hashFiles('deps.edn') }}
           restore-keys: clj-${{ runner.os }}-
 
       - name: Build uberjar
-        run: lein uberjar
+        run: clojure -T:build uber
 
       - name: Upload uberjar artifact
         uses: actions/upload-artifact@v4
