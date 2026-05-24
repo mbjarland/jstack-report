@@ -127,7 +127,7 @@ naming convention, and per-thread age computation."
   "If a thread's name follows the request-thread convention (ajp/http
   prefix), assoc a :request map describing the request."
   [dump-date thread]
-  (let [{:keys [pre time cid rid oip url]} (parse-thread-name (:NAME thread))]
+  (let [{:keys [pre time cid rid oip url]} (parse-thread-name (:name thread))]
     (if (or (= pre "ajp") (= pre "http"))
       (assoc thread :request (into (sorted-map)
                                    {:time time

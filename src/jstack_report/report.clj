@@ -44,7 +44,7 @@ traces, top URLs, and DB socketRead0 callouts."
             root-thread     (get threads-by-tid (:tid root))
             blocked         (analyze/key-count-in children)]
         (println (color [:bright :red] "⚠ Root blocker:")
-                 (color [:bright :white] (:NAME root-thread))
+                 (color [:bright :white] (:name root-thread))
                  (color [:bright :black] (str "(tid " (:tid root) ")"))
                  (color [:bright :red] (str "blocks " blocked " other threads")))
         (println (color [:bright :black]
@@ -87,7 +87,7 @@ traces, top URLs, and DB socketRead0 callouts."
       (header (str n " OLDEST REQUEST THREADS"))
       (doseq [t (take n threads)]
         (println (color [:green] (format "%10s" (-> t :request :display-age)))
-                 (:NAME t))))))
+                 (:name t))))))
 
 (defn ^:private print-youngest-threads [dump n]
   (let [threads (sort-by model/req-date (filter model/req-date (:threads dump)))]
@@ -95,7 +95,7 @@ traces, top URLs, and DB socketRead0 callouts."
       (header (str n " YOUNGEST REQUEST THREADS"))
       (doseq [t (reverse (take-last n threads))]
         (println (color [:green] (format "%10s" (-> t :request :display-age)))
-                 (:NAME t))))))
+                 (:name t))))))
 
 (defn ^:private grouped-tops [threads key-fn n]
   (let [groups (group-by key-fn (filter key-fn threads))
@@ -112,7 +112,7 @@ traces, top URLs, and DB socketRead0 callouts."
         (doseq [t (sort-by (fn [t] (- (-> t :request :age-seconds))) threads)]
           (println "     "
                    (color [:cyan] (format "%-10s" (str "age " (format "%6s" (-> t :request :display-age)))))
-                   (:NAME t)))))))
+                   (:name t)))))))
 
 (defn ^:private print-longest-traces [dump n]
   (let [threads (sort-by #(- (count (:trace %))) (:threads dump))
@@ -121,7 +121,7 @@ traces, top URLs, and DB socketRead0 callouts."
       (header (str "TOP " n " THREADS WITH LONGEST TRACES"))
       (doseq [t top-x]
         (println (color [:green] (format "    %4s lines" (count (:trace t))))
-                 "  " (:NAME t))))))
+                 "  " (:name t))))))
 
 (defn ^:private print-most-requested-urls [dump n]
   (let [top-x (grouped-tops (:threads dump) #(-> % :request :url) n)]
@@ -134,14 +134,14 @@ traces, top URLs, and DB socketRead0 callouts."
   (let [threads (filter analyze/db-socket-read? (:threads dump))]
     (when (seq threads)
       (header "THREADS WAITING ON DB IN SocketRead0" (str (count threads) " threads"))
-      (doseq [t (sort-by :NAME threads)]
+      (doseq [t (sort-by :name threads)]
         (let [age     (or (-> t :request :display-age) "")
               isValid (if (analyze/db-socket-read-is-valid? t)
                         (color [:bright :black] "[in isValid]")
                         "")]
           (println "     "
                    (color [:green] (format "%10s" age))
-                   (:NAME t)
+                   (:name t)
                    isValid))))))
 
 ;; ---------------------------------------------------------------------------

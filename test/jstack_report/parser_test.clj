@@ -123,7 +123,7 @@
   (let [d (model/dump (fixture-lines "minimal.txt"))]
     (is (= 1 (count (:threads d))))
     (let [t (first (:threads d))]
-      (is (= "main" (:NAME t)))
+      (is (= "main" (:name t)))
       (is (= 1      (:id t)))
       (is (= "RUNNABLE" (:thread-state t))))))
 
@@ -131,12 +131,12 @@
   (let [d (model/dump (fixture-lines "apple-orange-banana.txt"))]
     (is (= 4 (count (:threads d))))
     (is (= #{"thread-X" "thread-A" "thread-B" "thread-C"}
-           (set (map :NAME (:threads d)))))))
+           (set (map :name (:threads d)))))))
 
 (deftest request-threads-decorated
   (let [d  (model/dump (fixture-lines "request-threads.txt"))
         ts (:threads d)
-        by (fn [n] (first (filter #(= n (:NAME %)) ts)))]
+        by (fn [n] (first (filter #(= n (:name %)) ts)))]
     (testing "ajp/http threads pick up :request map"
       (is (= "clientAAA" (-> (by "ajp|093041.250|cid=clientAAA|rid=req001|oip=10.0.0.1|/api/orders")
                              :request :cid)))
@@ -149,7 +149,7 @@
 
 (deftest edge-cases-trace-types-roundtrip
   (let [d  (model/dump (fixture-lines "edge-cases.txt"))
-        by (fn [n] (first (filter #(= n (:NAME %)) (:threads d))))]
+        by (fn [n] (first (filter #(= n (:name %)) (:threads d))))]
     (testing "eliminated locks appear in trace with type :eliminated"
       (is (some #(= :eliminated (:type %)) (:trace (by "eliminated-locks")))))
     (testing "parking concurrent shows wait-type :concurrent"

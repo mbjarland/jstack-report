@@ -14,7 +14,7 @@
 
 (deftest reconcile-locks-extracts-locked-set-and-wait
   (let [d  (model/dump (fixture-lines "apple-orange-banana.txt"))
-        by (fn [n] (first (filter #(= n (:NAME %)) (:threads d))))
+        by (fn [n] (first (filter #(= n (:name %)) (:threads d))))
         a  (by "thread-A")
         x  (by "thread-X")
         c  (by "thread-C")]
@@ -37,7 +37,7 @@
             is removed from both :locked and :waiting-on — the thread has
             temporarily released the monitor and is not blocking anyone"
     (let [d  (model/dump (fixture-lines "request-threads.txt"))
-          rh (first (filter #(= "Reference Handler" (:NAME %)) (:threads d)))]
+          rh (first (filter #(= "Reference Handler" (:name %)) (:threads d)))]
       (is (nil? (:locked rh)))
       (is (nil? (:waiting-on rh))))))
 
@@ -89,15 +89,15 @@
 (deftest threads-by-tid-keyed-by-thread-id
   (let [d  (model/dump (fixture-lines "apple-orange-banana.txt"))
         bt (analyze/threads-by-tid d)]
-    (is (= "thread-X" (-> bt (get "0x000000000000000a") :NAME)))
-    (is (= "thread-C" (-> bt (get "0x000000000000000d") :NAME)))))
+    (is (= "thread-X" (-> bt (get "0x000000000000000a") :name)))
+    (is (= "thread-C" (-> bt (get "0x000000000000000d") :name)))))
 
 (deftest lockers-by-oid-finds-owning-thread
   (let [d  (model/dump (fixture-lines "apple-orange-banana.txt"))
         lo (analyze/lockers-by-oid d)]
-    (is (= "thread-X" (-> lo (get "0x0000000000000001") :NAME)))
-    (is (= "thread-A" (-> lo (get "0x0000000000000002") :NAME)))
-    (is (= "thread-B" (-> lo (get "0x0000000000000003") :NAME)))))
+    (is (= "thread-X" (-> lo (get "0x0000000000000001") :name)))
+    (is (= "thread-A" (-> lo (get "0x0000000000000002") :name)))
+    (is (= "thread-B" (-> lo (get "0x0000000000000003") :name)))))
 
 (deftest waiters-by-tid-chains-tids-to-owners
   (let [d  (model/dump (fixture-lines "apple-orange-banana.txt"))

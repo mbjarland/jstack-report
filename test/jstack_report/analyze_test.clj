@@ -14,7 +14,7 @@
 (deftest transitive-path-walks-from-leaf-to-root
   (let [d  (model/dump (fixture-lines "apple-orange-banana.txt"))
         wt (analyze/waiters-by-tid d)
-        c  (first (filter #(= "thread-C" (:NAME %)) (:threads d)))
+        c  (first (filter #(= "thread-C" (:name %)) (:threads d)))
         p  (analyze/transitive-path wt c)]
     (is (= ["0x000000000000000a" "0x000000000000000b" "0x000000000000000c"]
            (map :tid p)))))
@@ -58,7 +58,7 @@
 
 (deftest db-socket-read-detection
   (let [d (model/dump (fixture-lines "db-socket-read.txt"))
-        by (fn [n] (first (filter #(= n (:NAME %)) (:threads d))))]
+        by (fn [n] (first (filter #(= n (:name %)) (:threads d))))]
     (testing "matches socketRead0 + oracle wrapper"
       (is (analyze/db-socket-read? (by "db-read-regular")))
       (is (analyze/db-socket-read? (by "db-read-validating"))))
@@ -70,6 +70,6 @@
 
 (deftest tx-reaper-detection
   (let [d  (model/dump (fixture-lines "db-socket-read.txt"))
-        by (fn [n] (first (filter #(= n (:NAME %)) (:threads d))))]
+        by (fn [n] (first (filter #(= n (:name %)) (:threads d))))]
     (is (analyze/tx-reaper? (by "tx-reaper")))
     (is (not (analyze/tx-reaper? (by "plain-worker"))))))

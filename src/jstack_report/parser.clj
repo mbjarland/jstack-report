@@ -143,7 +143,7 @@ render, report) layer enrichment, derivation, and presentation on top."
   [line]
   (let [prop (partial first-line-prop line)]
     (assoc-non-nil
-      {:NAME      (thread-name line)
+      {:name      (thread-name line)
        :id        (id line)
        :daemon?   (daemon? line)
        :prio      (some-> (prop "prio") Integer/parseInt)

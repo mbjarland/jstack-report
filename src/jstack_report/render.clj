@@ -74,7 +74,7 @@ namespace prints."
                         (color fg-bright (short-name class))
                         (color fg-normal " " (:oid k) " - ")
                         (color fg-bright "blocks " b-count " threads")))]
-    (cond-> [(str/join " " [(:NAME thread) age extra])]
+    (cond-> [(str/join " " [(:name thread) age extra])]
             has-kids? (conj second-line))))
 
 (defn render-lock-graph
@@ -84,7 +84,7 @@ namespace prints."
   ([dump graph]
    (let [threads-by-tid (analyze/threads-by-tid dump)
          render-fn      (partial render-graph-node threads-by-tid)
-         name           (fn [tid] (:NAME (get threads-by-tid tid)))
+         name           (fn [tid] (:name (get threads-by-tid tid)))
          key-comp-f     (fn [a b]
                           (let [nc (compare (name (:tid a)) (name (:tid b)))]
                             (if (zero? nc) (compare (:oid a) (:oid b)) nc)))]
