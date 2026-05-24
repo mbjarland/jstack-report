@@ -74,7 +74,7 @@ namespace prints."
                         (color fg-bright (short-name class))
                         (color fg-normal " " (:oid k) " - ")
                         (color fg-bright "blocks " b-count " threads")))]
-    (cond-> [(str/join " " [(:name thread) age extra])]
+    (cond-> [(str/join " " (remove nil? [(:name thread) age extra]))]
             has-kids? (conj second-line))))
 
 (defn render-lock-graph
