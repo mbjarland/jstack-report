@@ -40,13 +40,20 @@
     (< ms 1000) (format "%8.1f ms" (double ms))
     :else       (format "%8.2f s " (double (/ ms 1000)))))
 
-(defn ^:private print-row [{:keys [label avg-ms min-ms max-ms pct]}]
-  (println (format "  %-32s %s   (min %s, max %s%s)"
-                   label
-                   (fmt-ms avg-ms)
-                   (fmt-ms min-ms)
-                   (fmt-ms max-ms)
-                   (if pct (format ", %4.1f%% of total" pct) ""))))
+(defn ^:private print-table
+  "Print a sequence of bench-n result maps as an aligned table. Label
+  column is sized to the longest label in the batch so every row's
+  timing columns line up."
+  [rows]
+  (let [width (apply max (map (comp count :label) rows))
+        fmt   (str "  %-" width "s   %s   (min %s, max %s%s)")]
+    (doseq [{:keys [label avg-ms min-ms max-ms pct]} rows]
+      (println (format fmt
+                       label
+                       (fmt-ms avg-ms)
+                       (fmt-ms min-ms)
+                       (fmt-ms max-ms)
+                       (if pct (format ", %4.1f%% of total" pct) ""))))))
 
 (defn ^:private discard
   "Force lazy seqs and Java collections so we time the actual work
@@ -84,33 +91,33 @@
           graph     (analyze/transitive-lock-graph d)
           parse-r   (bench-n runs "parser/parse-jstack-lines"
                              #(discard (parser/parse-jstack-lines lines)))
-          dump-r    (bench-n runs "model/dump (parse+reconcile+decorate)"
+          dump-r    (bench-n runs "model/dump (parse + reconcile + decorate)"
                              #(discard (model/dump lines)))
-          graph-r   (bench-n runs "analyze/transitive-lock-graph"
-                             #(discard (analyze/transitive-lock-graph d)))
-          idx-r     (bench-n runs "analyze/threads-by-tid + lockers-by-oid + waiters-by-tid"
+          idx-r     (bench-n runs "analyze/indexes (tid + oid + waiters)"
                              #(do (discard (analyze/threads-by-tid d))
                                   (discard (analyze/lockers-by-oid d))
                                   (discard (analyze/waiters-by-tid d))))
+          graph-r   (bench-n runs "analyze/transitive-lock-graph"
+                             #(discard (analyze/transitive-lock-graph d)))
           render-r  (bench-n runs "render/render-lock-graph"
                              #(binding [ansi/*use-ansi* false]
                                 (discard (render/render-lock-graph d graph))))
           report-r  (bench-n runs "report/report (full text output)"
                              #(binding [ansi/*use-ansi* false]
                                 (discard (with-out-str (report/report d)))))
-          full-r    (bench-n runs "model/dump + report/report (end-to-end)"
+          full-r    (bench-n runs "end-to-end (model/dump + report/report)"
                              #(binding [ansi/*use-ansi* false]
                                 (discard (with-out-str (report/report (model/dump lines))))))
+          rows      [parse-r dump-r idx-r graph-r render-r report-r full-r]
           total     (:avg-ms full-r)]
       (println (format "  threads parsed: %d  ·  graph roots: %d  ·  blocked threads: %d"
                        thr-count
                        (count graph)
                        (analyze/key-count-in graph)))
       (println)
-      (println "  Phase                              average        (min, max, pct of full)")
-      (println "  ----------------------------------------------------------------------------")
-      (doseq [r [parse-r dump-r idx-r graph-r render-r report-r full-r]]
-        (print-row (assoc r :pct (* 100.0 (/ (:avg-ms r) total))))))))
+      (print-table
+        (for [r rows]
+          (assoc r :pct (* 100.0 (/ (:avg-ms r) total))))))))
 
 (defn -main [& [path runs]]
   (let [runs (Integer/parseInt (or runs "5"))]
