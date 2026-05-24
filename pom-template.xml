@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <name>jstack-report</name>
+  <description>A tool for visualizing the transitive lock graph of a Java jstack thread dump.</description>
+  <url>https://github.com/mbjarland/jstack-report</url>
+
+  <licenses>
+    <license>
+      <name>Eclipse Public License 2.0</name>
+      <url>https://www.eclipse.org/legal/epl-2.0/</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <developers>
+    <developer>
+      <id>mbjarland</id>
+      <name>Matias Bjarland</name>
+      <email>mbjarland@gmail.com</email>
+    </developer>
+  </developers>
+
+  <scm>
+    <connection>scm:git:git://github.com/mbjarland/jstack-report.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/mbjarland/jstack-report.git</developerConnection>
+    <url>https://github.com/mbjarland/jstack-report</url>
+  </scm>
+</project>
