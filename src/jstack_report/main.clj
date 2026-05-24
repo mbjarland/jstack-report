@@ -3,7 +3,7 @@
             [clojure.java.io :as jio]
             [clojure.string :as str]
             [clojure.tools.cli :refer [parse-opts]]
-            [jstack-report.core :as core])
+            [jstack-report.report :as report])
   (:import [java.io File PushbackReader Reader]
            [java.text SimpleDateFormat]
            [java.util Date])
@@ -107,7 +107,7 @@
       (if hard-exit-on-errors?
         (exit (if ok? 0 1) exit-message)
         (println "would exit with code " (if ok? 0 1) "msg," exit-message))
-      (core/jstack-report options))))
+      (report/jstack-report options))))
 
 (defn -main [& args]
   (main-entrypoint true args))

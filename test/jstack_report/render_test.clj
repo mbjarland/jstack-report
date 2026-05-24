@@ -2,8 +2,10 @@
   (:require [clojure.java.io :as jio]
             [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
+            [jstack-report.analyze :as analyze]
             [jstack-report.ansi :as ansi]
-            [jstack-report.core :as core]))
+            [jstack-report.model :as model]
+            [jstack-report.render :as render]))
 
 (defn fixture-lines [name]
   (str/split-lines (slurp (jio/resource (str "dumps/" name)))))
@@ -23,9 +25,9 @@
 ;; Tree rendering
 
 (deftest render-lock-graph-produces-tree-shape
-  (let [d     (core/dump (fixture-lines "apple-orange-banana.txt"))
+  (let [d     (model/dump (fixture-lines "apple-orange-banana.txt"))
         lines (ansi/without-ansi
-                (doall (core/render-lock-graph d)))]
+                (doall (render/render-lock-graph d)))]
     (testing "rendering produces at least one line"
       (is (seq lines)))
     (testing "tree contains box-drawing characters somewhere"
@@ -34,24 +36,24 @@
       (is (some #(str/includes? % "thread-C") lines)))))
 
 (deftest render-graph-node-shows-blocker-count
-  (let [d              (core/dump (fixture-lines "wide-graph.txt"))
-        threads-by-tid (core/threads-by-tid d)
-        graph          (core/transitive-lock-graph d)
+  (let [d              (model/dump (fixture-lines "wide-graph.txt"))
+        threads-by-tid (analyze/threads-by-tid d)
+        graph          (analyze/transitive-lock-graph d)
         [k v]          (first graph)
         rendered       (ansi/without-ansi
-                         (core/render-graph-node threads-by-tid k v))]
+                         (render/render-graph-node threads-by-tid k v))]
     (is (some #(re-find #"blocks 5 threads" %) rendered))))
 
 (deftest render-graph-node-leaf-has-one-line-only
-  (let [d              (core/dump (fixture-lines "wide-graph.txt"))
-        threads-by-tid (core/threads-by-tid d)
-        graph          (core/transitive-lock-graph d)
+  (let [d              (model/dump (fixture-lines "wide-graph.txt"))
+        threads-by-tid (analyze/threads-by-tid d)
+        graph          (analyze/transitive-lock-graph d)
         [_ children]   (first graph)
         [k v]          (first children)
         rendered       (ansi/without-ansi
-                         (core/render-graph-node threads-by-tid k v))]
+                         (render/render-graph-node threads-by-tid k v))]
     (is (= 1 (count rendered)))))
 
 (deftest short-name-strips-fqn
-  (is (= "Object" (core/short-name "java.lang.Object")))
-  (is (= "Apple"  (core/short-name "example.deep.nested.Apple"))))
+  (is (= "Object" (render/short-name "java.lang.Object")))
+  (is (= "Apple"  (render/short-name "example.deep.nested.Apple"))))
