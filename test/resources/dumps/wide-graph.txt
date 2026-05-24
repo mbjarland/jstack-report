@@ -1,0 +1,52 @@
+2024-01-15 09:30:45
+Full thread dump OpenJDK 64-Bit Server VM (17.0.8+7 mixed mode, sharing):
+
+"root-blocker" #100 daemon prio=5 os_prio=0 tid=0x0000000000000100 nid=0x0100 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.Root.run(Root.java:1)
+	- locked <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"blocked-1" #101 daemon prio=5 os_prio=0 tid=0x0000000000000101 nid=0x0101 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.Worker.run(Worker.java:1)
+	- waiting to lock <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"blocked-2" #102 daemon prio=5 os_prio=0 tid=0x0000000000000102 nid=0x0102 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.Worker.run(Worker.java:1)
+	- waiting to lock <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"blocked-3" #103 daemon prio=5 os_prio=0 tid=0x0000000000000103 nid=0x0103 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.Worker.run(Worker.java:1)
+	- waiting to lock <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"blocked-4" #104 daemon prio=5 os_prio=0 tid=0x0000000000000104 nid=0x0104 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.Worker.run(Worker.java:1)
+	- waiting to lock <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"blocked-5" #105 daemon prio=5 os_prio=0 tid=0x0000000000000105 nid=0x0105 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.Worker.run(Worker.java:1)
+	- waiting to lock <0x00000000000000aa> (a example.SharedMutex)
+
+   Locked ownable synchronizers:
+	- None
+
+JNI global refs: 6

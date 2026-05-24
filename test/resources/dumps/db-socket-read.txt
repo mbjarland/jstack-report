@@ -1,0 +1,37 @@
+2024-01-15 09:30:45
+Full thread dump OpenJDK 64-Bit Server VM (17.0.8+7 mixed mode, sharing):
+
+"db-read-validating" #1 daemon prio=5 os_prio=0 tid=0x0000000000000001 nid=0x0001 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at java.net.SocketInputStream.socketRead0(Native Method)
+	at oracle.jdbc.driver.T4CSocketInputStreamWrapper.read(T4CSocketInputStreamWrapper.java:42)
+	at org.jboss.resource.adapter.jdbc.CheckValidConnectionSQL.isValidConnection(CheckValidConnectionSQL.java:99)
+	at example.App.run(App.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+"db-read-regular" #2 daemon prio=5 os_prio=0 tid=0x0000000000000002 nid=0x0002 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at java.net.SocketInputStream.socketRead0(Native Method)
+	at oracle.jdbc.driver.T4CSocketInputStreamWrapper.read(T4CSocketInputStreamWrapper.java:42)
+	at example.App.run(App.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+"tx-reaper" #3 daemon prio=5 os_prio=0 tid=0x0000000000000003 nid=0x0003 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at com.arjuna.ats.internal.arjuna.coordinator.ReaperWorkerThread.run(ReaperWorkerThread.java:42)
+
+   Locked ownable synchronizers:
+	- None
+
+"plain-worker" #4 daemon prio=5 os_prio=0 tid=0x0000000000000004 nid=0x0004 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.Worker.run(Worker.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+JNI global refs: 4

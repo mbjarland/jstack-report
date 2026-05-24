@@ -1,0 +1,44 @@
+2024-01-15 09:30:45
+Full thread dump OpenJDK 64-Bit Server VM (17.0.8+7 mixed mode, sharing):
+
+"ajp|093041.250|cid=clientAAA|rid=req001|oip=10.0.0.1|/api/orders" #21 daemon prio=5 os_prio=0 tid=0x0000000000000021 nid=0x0021 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.OrderService.create(OrderService.java:10)
+	- waiting to lock <0x000000000000aaaa> (a example.Mutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"ajp|093040.000|cid=clientBBB|rid=req002|oip=10.0.0.2|/api/cart" #22 daemon prio=5 os_prio=0 tid=0x0000000000000022 nid=0x0022 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.CartService.fetch(CartService.java:5)
+	- locked <0x000000000000aaaa> (a example.Mutex)
+
+   Locked ownable synchronizers:
+	- None
+
+"http|093042.500|cid=clientAAA|rid=req003|oip=10.0.0.1|/api/profile" #23 daemon prio=5 os_prio=0 tid=0x0000000000000023 nid=0x0023 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.ProfileService.get(ProfileService.java:7)
+
+   Locked ownable synchronizers:
+	- None
+
+"ajp|093043.000|cid=clientCCC|rid=req004|oip=10.0.0.3|/api/search" #24 daemon prio=5 os_prio=0 tid=0x0000000000000024 nid=0x0024 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.SearchService.query(SearchService.java:3)
+
+   Locked ownable synchronizers:
+	- None
+
+"Reference Handler" #2 daemon prio=10 os_prio=0 tid=0x000000000000002a nid=0x002a in Object.wait() [0x0000000000000000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait(Native Method)
+	- waiting on <0x000000000000bbbb> (a java.lang.ref.Reference$Lock)
+	at java.lang.Object.wait(Object.java:485)
+	- locked <0x000000000000bbbb> (a java.lang.ref.Reference$Lock)
+
+   Locked ownable synchronizers:
+	- None
+
+JNI global refs: 5

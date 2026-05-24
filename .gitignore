@@ -17,3 +17,4 @@ reflection.json
 .clj-kondo/
 gen-resources
 local-files
+/.claude/

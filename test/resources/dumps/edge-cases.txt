@@ -1,0 +1,57 @@
+2024-01-15 09:30:45
+Full thread dump OpenJDK 64-Bit Server VM (17.0.8+7 mixed mode, sharing):
+
+"eliminated-locks" #1 daemon prio=5 os_prio=0 tid=0x0000000000000001 nid=0x0001 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.Eliminated.run(Eliminated.java:1)
+	- eliminated <0x0000000000000010> (a example.UncontendedLock)
+	at example.Eliminated.run(Eliminated.java:2)
+
+   Locked ownable synchronizers:
+	- None
+
+"parking-concurrent" #2 daemon prio=5 os_prio=0 tid=0x0000000000000002 nid=0x0002 waiting on condition [0x0000000000000000]
+   java.lang.Thread.State: WAITING (parking)
+	at sun.misc.Unsafe.park(Native Method)
+	- parking to wait for  <0x0000000000000020> (a java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject)
+	at example.Parker.run(Parker.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+"notify-wait-pair" #3 daemon prio=5 os_prio=0 tid=0x0000000000000003 nid=0x0003 in Object.wait() [0x0000000000000000]
+   java.lang.Thread.State: WAITING (on object monitor)
+	at java.lang.Object.wait(Native Method)
+	- waiting on <0x0000000000000030> (a example.NotifyLock)
+	at java.lang.Object.wait(Object.java:485)
+	- locked <0x0000000000000030> (a example.NotifyLock)
+	at example.NotifyWait.run(NotifyWait.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+"class-for-form" #4 daemon prio=5 os_prio=0 tid=0x0000000000000004 nid=0x0004 waiting for monitor entry [0x0000000000000000]
+   java.lang.Thread.State: BLOCKED (on object monitor)
+	at example.ClassLockedSync.go(ClassLockedSync.java:1)
+	- waiting to lock <0x0000000000000040> (a java.lang.Class for example.SessionManager)
+
+   Locked ownable synchronizers:
+	- None
+
+"native-method-trace" #5 daemon prio=5 os_prio=0 tid=0x0000000000000005 nid=0x0005 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at sun.misc.Unsafe.compareAndSwap(Native Method)
+	at example.Cas.run(Cas.java:1)
+
+   Locked ownable synchronizers:
+	- None
+
+"owns-some-locks" #6 daemon prio=5 os_prio=0 tid=0x0000000000000006 nid=0x0006 runnable [0x0000000000000000]
+   java.lang.Thread.State: RUNNABLE
+	at example.Owner.run(Owner.java:1)
+
+   Locked ownable synchronizers:
+	- <0x0000000000000050> (a java.util.concurrent.locks.ReentrantReadWriteLock$NonfairSync)
+	- <0x0000000000000051> (a java.util.concurrent.locks.ReentrantReadWriteLock$NonfairSync)
+
+JNI global refs: 6

@@ -1,0 +1,8 @@
+2024-01-15 09:30:45
+Full thread dump OpenJDK 64-Bit Server VM (17.0.8+7 mixed mode, sharing):
+
+"main" #1 prio=5 os_prio=31 cpu=12.34ms elapsed=1.23s tid=0x0000000123456000 nid=0x1c03 runnable  [0x000000016f1eb000]
+   java.lang.Thread.State: RUNNABLE
+	at java.lang.Thread.run(java.base@17.0.8/Thread.java:833)
+
+JNI global refs: 17, weak refs: 0

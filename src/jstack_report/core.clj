@@ -283,9 +283,9 @@
   (case state
         :block-second (parse-block-second-line rec line)
         :trace-element (parse-trace-element-line-delayed rec line)
-        ;;:owned-locks-start (update rec :lines conj "")
-        :locked (parse-dashed-line rec state line)
-        (:waiting-concurrent
+        (:locked
+          :eliminated
+          :waiting-concurrent
           :waiting-notify
           :waiting-synchronized
           :waiting-re-lock) (parse-dashed-line rec state line)
