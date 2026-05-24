@@ -14,7 +14,7 @@
             [clojure.tools.build.api :as b]))
 
 (def lib       'jstack-report)
-(def version   "1.3.0")
+(def version   "1.3.1")
 (def class-dir "target/classes")
 (def uber-file (format "target/%s-%s-standalone.jar" (name lib) version))
 (def basis     (delay (b/create-basis {:project "deps.edn"})))

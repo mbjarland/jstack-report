@@ -1,7 +1,7 @@
 # jstack-report
 
 [![CI](https://github.com/mbjarland/jstack-report/actions/workflows/ci.yml/badge.svg)](https://github.com/mbjarland/jstack-report/actions)
-[![Version](https://img.shields.io/badge/version-1.3.0-brightgreen)](https://img.shields.io/badge/version-1.3.0-brightgreen)
+[![Version](https://img.shields.io/badge/version-1.3.1-brightgreen)](https://img.shields.io/badge/version-1.3.1-brightgreen)
 [![License](https://img.shields.io/badge/License-EPL_2.0-green.svg)](https://www.eclipse.org/legal/epl-2.0/)
 
 **jstack-report** turns a `jstack` thread dump into a one-screen
@@ -105,7 +105,7 @@ clojure -M:test          # run the suite
 clojure -T:build uber    # produce the standalone jar
 ```
 
-The uberjar lands at `target/jstack-report-1.3.0-standalone.jar`.
+The uberjar lands at `target/jstack-report-1.3.1-standalone.jar`.
 
 You can also run the tool directly from sources without building,
 which is handy during development:
@@ -119,9 +119,9 @@ clojure -M:run -f <thread-dump.txt>
 Two equivalent invocations:
 
 ```bash
-java -jar target/jstack-report-1.3.0-standalone.jar -f <thread-dump.txt>
+java -jar target/jstack-report-1.3.1-standalone.jar -f <thread-dump.txt>
 
-cat <thread-dump.txt> | java -jar target/jstack-report-1.3.0-standalone.jar
+cat <thread-dump.txt> | java -jar target/jstack-report-1.3.1-standalone.jar
 ```
 
 If no `-f` is given, the tool reads from stdin.
@@ -129,7 +129,7 @@ If no `-f` is given, the tool reads from stdin.
 A shell alias makes daily use less verbose:
 
 ```bash
-alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.3.0-standalone.jar'
+alias jstack-report='java -jar ~/jstack-report/target/jstack-report-1.3.1-standalone.jar'
 jstack-report -f <thread-dump.txt>
 ```
 
