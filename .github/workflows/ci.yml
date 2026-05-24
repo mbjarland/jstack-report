@@ -1,52 +1,88 @@
-name: Clojure CI
+name: CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [master]
   pull_request:
-    branches: [ "master" ]
+    branches: [master]
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        jdk: [ 11, 17, 21 ]         # Support java LTS and latest
-        clojure: [ 11 ]
-
-    name: Clojure ${{ matrix.clojure }} Java ${{ matrix.jdk }}
-
+  test:
+    name: Test (JDK ${{ matrix.jdk }})
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: [11, 17, 21]
     steps:
-      - uses: actions/checkout@v4.1.0
-      - name: Setup Java ${{ matrix.jdk }}
-        uses: actions/setup-java@v3.13.0
+      - uses: actions/checkout@v4
         with:
-          distribution: zulu
+          fetch-depth: 0          # lein-git-version needs the full history
+
+      - name: Set up JDK ${{ matrix.jdk }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
           java-version: ${{ matrix.jdk }}
-      - name: Setup Clojure
-        uses: DeLaGuardo/setup-clojure@master
+
+      - name: Set up Clojure / Leiningen
+        uses: DeLaGuardo/setup-clojure@13.0
         with:
-          cli: latest
-          leiningen: latest
-      - name: Cache clojure dependencies
-        uses: actions/cache@v3
+          lein: latest
+
+      - name: Cache Clojure deps
+        uses: actions/cache@v4
         with:
           path: |
             ~/.m2/repository
             ~/.gitlibs
             ~/.deps.clj
-          key: cljdeps-${{ hashFiles('project.clj') }}
-          restore-keys: cljdeps-
-      # - name: Execute tests
-      #   run: clojure -M:test
+          key: clj-${{ runner.os }}-${{ hashFiles('project.clj') }}
+          restore-keys: clj-${{ runner.os }}-
+
+      - name: Run tests
+        run: lein test
+
+  build:
+    name: Build uberjar
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Clojure / Leiningen
+        uses: DeLaGuardo/setup-clojure@13.0
+        with:
+          lein: latest
+
+      - name: Cache Clojure deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.m2/repository
+            ~/.gitlibs
+            ~/.deps.clj
+          key: clj-${{ runner.os }}-${{ hashFiles('project.clj') }}
+          restore-keys: clj-${{ runner.os }}-
+
       - name: Build uberjar
         run: lein uberjar
-#      - name: archive uberjar
-#        uses: actions/upload-artifact@v3
-#        with:
-#          name: findjar-standalone-jar
-#          path: |
-#            target/findjar-*-standalone.jar
-#            gen-resources/build/version.edn
-#            LICENSE
+
+      - name: Upload uberjar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jstack-report-standalone
+          path: |
+            target/jstack-report-*-standalone.jar
+            gen-resources/build/version.edn
+            LICENSE
+            README.md
+          retention-days: 30
