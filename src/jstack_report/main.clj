@@ -9,16 +9,30 @@
            [java.util Date])
   (:gen-class))
 
-(defn version-string []
-  (with-open [io-reader (jio/reader (or (jio/resource "build/version.edn")
-                                        (jio/file "gen-resources/build/version.edn")))
-              pb-reader (PushbackReader. io-reader)]
-    (let [{:keys [timestamp ref-short version dirty?]} (edn/read pb-reader)
-          dev-timestamp (str (Math/round ^Double (/ (System/currentTimeMillis) 1000.0)))
-          timestamp     (parse-long (or timestamp dev-timestamp))
-          format        (SimpleDateFormat. "yyyy.MM.dd HH:mm:ss")
-          date          (.format format (Date. ^Long (* timestamp 1000)))]
-      (str version " - " ref-short " - " date (if dirty? " +" "")))))
+(defn ^:private version-source
+  "Locate the version.edn that build.clj produced — either on the
+  classpath (inside the uberjar) or on disk (during dev/CI tests).
+  Returns nil if neither is present."
+  []
+  (or (jio/resource "build/version.edn")
+      (let [f (jio/file "gen-resources/build/version.edn")]
+        (when (.exists f) f))))
+
+(defn version-string
+  "Render the human-readable footer shown by --help. Falls back to a
+  '(dev)' placeholder when no version.edn is available (running from
+  sources without having built the uberjar yet)."
+  []
+  (if-let [src (version-source)]
+    (with-open [io-reader (jio/reader src)
+                pb-reader (PushbackReader. io-reader)]
+      (let [{:keys [timestamp ref-short version dirty?]} (edn/read pb-reader)
+            dev-timestamp (str (quot (System/currentTimeMillis) 1000))
+            timestamp     (parse-long (or timestamp dev-timestamp))
+            format        (SimpleDateFormat. "yyyy.MM.dd HH:mm:ss")
+            date          (.format format (Date. ^Long (* timestamp 1000)))]
+        (str version " - " ref-short " - " date (if dirty? " +" ""))))
+    "(dev — no version.edn; run clojure -T:build uber to stamp one)"))
 
 (def cli-options
   ;; An option with a required argument
