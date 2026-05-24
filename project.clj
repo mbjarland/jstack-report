@@ -1,4 +1,4 @@
-(defproject jstack-report "1.1.0"
+(defproject jstack-report "1.2.0"
   :description "jstack-report - a tool for analyzing jstack thread dumps"
   :url "https://github.com/mbjarland/jstack-report"
   :license {:name "Eclipse Public License"
