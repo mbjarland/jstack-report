@@ -16,17 +16,20 @@ render, report) layer enrichment, derivation, and presentation on top."
 ;; State machine definition
 
 (def block-transitions
-  "Patterns that may appear inside a thread block. The order matters:
-  the parser walks this list top-to-bottom and takes the first match."
-  ["\t- locked"               :locked
+  "Patterns that may appear inside a thread block. The parser walks
+  this list top-to-bottom and takes the first match — so the most
+  common patterns (stack-trace entries, blank line terminators) come
+  first. Patterns are mutually exclusive, so order is a performance
+  knob only."
+  [:empty                     :block-end           ; ends every block
+   "\tat "                    :trace-element       ; ~95% of in-block lines
+   "\t- locked"               :locked
+   "\t- waiting to lock"      :waiting-synchronized
    "\t- parking to wait for"  :waiting-concurrent
    "\t- waiting on"           :waiting-notify
-   "\t- waiting to lock"      :waiting-synchronized
    "\t- waiting to re-lock"   :waiting-re-lock
    "\t- eliminated "          :eliminated
-   "\tat "                    :trace-element
-   "   No compile task"       :no-compile-task
-   :empty                     :block-end])
+   "   No compile task"       :no-compile-task])
 
 (def finite-state-machine
   "Allowed state transitions keyed by current state. `:start` is a
@@ -97,12 +100,17 @@ render, report) layer enrichment, derivation, and presentation on top."
 ;; ---------------------------------------------------------------------------
 ;; First line of a thread block
 
+(def ^:private prop-re-cache
+  "Memoized regex per property name. We see the same handful of names
+  (prio, os_prio, tid, nid, cpu, elapsed) thousands of times per dump,
+  so compiling the pattern once is worth it."
+  (memoize (fn [name] (re-pattern (str " " name "=([^ ]+) ")))))
+
 (defn first-line-prop
   "Extract a `name=value` property value from the first line of a
   thread block (e.g. `prio=6`, `tid=0x00007f4e0c0e9800`)."
   [line name]
-  (let [re (re-pattern (str " " name "=([^ ]+) "))]
-    (second (re-find re line))))
+  (second (re-find (prop-re-cache name) line)))
 
 (defn thread-name
   "Extract a thread name (the leading quoted segment) from the first
@@ -131,9 +139,12 @@ render, report) layer enrichment, derivation, and presentation on top."
 ;; Block line parsers
 
 (defn ^:private assoc-non-nil
-  "Assoc into a sorted-map, dropping entries with nil values."
+  "Drop entries with nil values. Hash-map output — there's no reason
+  to pay the red-black-tree allocation cost on a 4000-thread parse."
   [m]
-  (into (sorted-map) (filter val m)))
+  (persistent! (reduce-kv (fn [a k v] (if (some? v) (assoc! a k v) a))
+                          (transient {})
+                          m)))
 
 (defn parse-block-first-line
   "Parse the quoted-name + flags line that opens a thread block.
@@ -176,14 +187,13 @@ render, report) layer enrichment, derivation, and presentation on top."
      :line-# (some-> (:line-# file-and-line) Integer/parseInt)}))
 
 (defn parse-trace-element-line-delayed
-  "Append a stack-trace element to the thread's :trace vector. The
-  element keeps the raw `:line` plus a `:details` delay that, when
-  derefed, parses the class/method/file/line."
+  "Append a stack-trace element to the thread's :trace vector. Keeps
+  only the raw `:line` and an element `:type` so the parser stays
+  cheap; callers that need the parsed class/method/file/line can run
+  `parse-trace-element-line` on the `:line` themselves."
   [rec line]
   (update rec :trace (fnil conj [])
-          {:type    :stack-element
-           :line    line
-           :details (delay (parse-trace-element-line line))}))
+          {:type :stack-element :line line}))
 
 (defn parse-dashed-line
   "Parse one of the `\\t- ...` annotation lines emitted by jstack, e.g.
@@ -231,34 +241,50 @@ render, report) layer enrichment, derivation, and presentation on top."
                         (java.time.format.DateTimeFormatter/ofPattern "yyyy-MM-dd HH:mm:ss")))
     dump))
 
-(defn parse-line [m state line line-#]
-  (case state
-        :prelude     (cond-> m
-                       (empty? (:prelude m)) (decorate-dump-date line)
-                       true                  (update :prelude conj line))
-        :epilogue    (update m :epilogue conj line)
-        :undefined   (throw (ex-info (str "error on line "
-                                          line-#
-                                          " - no state transition defined for line:\n"
-                                          line)
-                                     {:line#         line-#
-                                      :line          line
-                                      :current-state state}))
-        :block-start (update m :threads conj (parse-block-first-line line))
-        (update-in m
-                   [:threads (-> m :threads count dec)]
-                   parse-block-line state line)))
-
 (defn parse-jstack-lines
   "Walk a sequence of jstack lines and return the structural skeleton:
   prelude, vector of threads with raw `:trace`, and epilogue. Use
-  jstack-report.model/dump for the fully enriched result."
+  jstack-report.model/dump for the fully enriched result.
+
+  The in-progress thread block is tracked as a local `building` and
+  only conj'd into the threads vector at block boundaries. For a
+  500k-line dump that saves hundreds of thousands of intermediate
+  outer-map allocations the previous `update-in [:threads idx] ...`
+  approach was paying."
   [lines]
   (loop [m          {:prelude [] :threads [] :epilogue []}
+         building   nil
          prev-state :start
          line-#     1
          [line & xs] lines]
     (let [state (next-state prev-state line)]
-      (if (not= state :end)
-        (recur (parse-line m state line line-#) state (inc line-#) xs)
-        m))))
+      (cond
+        (= state :end)
+        (if building (update m :threads conj building) m)
+
+        (= state :undefined)
+        (throw (ex-info (str "error on line " line-#
+                             " - no state transition defined for line:\n" line)
+                        {:line#         line-#
+                         :line          line
+                         :current-state state}))
+
+        (= state :prelude)
+        (recur (cond-> m
+                 (empty? (:prelude m)) (decorate-dump-date line)
+                 true                  (update :prelude conj line))
+               building state (inc line-#) xs)
+
+        (= state :epilogue)
+        (recur (update m :epilogue conj line)
+               building state (inc line-#) xs)
+
+        (= state :block-start)
+        (recur (if building (update m :threads conj building) m)
+               (parse-block-first-line line)
+               state (inc line-#) xs)
+
+        :else
+        (recur m
+               (parse-block-line building state line)
+               state (inc line-#) xs)))))

@@ -100,43 +100,61 @@ naming convention, and per-thread age computation."
 ;; ---------------------------------------------------------------------------
 ;; Thread name decoration
 
-(defn ^:private name-part [token]
-  (fn [part]
-    (let [[_ lhs rhs] (re-find #"([^=]+)=([^=]+)" part)]
-      (when (= lhs token) rhs))))
-
 (defn parse-thread-name
   "Parse a thread name of the form
 
       ajp|093041.250|cid=clientA|rid=req001|oip=10.0.0.1|/api/x
 
   into `{:pre :time :cid :rid :oip :url}`. Returns nil when the name
-  has no pipe-separated parts."
+  has no pipe-separated parts.
+
+  Single-pass: walks the parts once and routes each `k=v` segment to
+  the matching slot by indexOf rather than regex matching."
   [name]
-  (let [parts   (str/split name #"\|")
-        extract (fn [token] (first (keep (name-part token) parts)))]
-    (when (< 1 (count parts))
-      {:pre  (first parts)
-       :time (nth parts 1)
-       :cid  (extract "cid")
-       :rid  (extract "rid")
-       :oip  (extract "oip")
-       :url  (last parts)})))
+  (let [parts (str/split name #"\|")
+        n     (count parts)]
+    (when (< 1 n)
+      (loop [i   2
+             cid nil
+             rid nil
+             oip nil]
+        (if (>= i (dec n))
+          {:pre  (parts 0)
+           :time (parts 1)
+           :cid  cid
+           :rid  rid
+           :oip  oip
+           :url  (parts (dec n))}
+          (let [^String p (parts i)
+                eq        (.indexOf p (int \=))]
+            (if (neg? eq)
+              (recur (inc i) cid rid oip)
+              (let [k (.substring p 0 eq)
+                    v (.substring p (inc eq))]
+                (recur (inc i)
+                       (if (= "cid" k) v cid)
+                       (if (= "rid" k) v rid)
+                       (if (= "oip" k) v oip))))))))))
+
+(defn ^:private request-thread? [name]
+  (or (str/starts-with? name "ajp|")
+      (str/starts-with? name "http|")))
 
 (defn decorate-request-thread
   "If a thread's name follows the request-thread convention (ajp/http
-  prefix), assoc a :request map describing the request."
+  prefix), assoc a :request map describing the request. Cheap prefix
+  check first so we don't parse-and-throw-away three-thousand-plus
+  non-request thread names per dump."
   [dump-date thread]
-  (let [{:keys [pre time cid rid oip url]} (parse-thread-name (:name thread))]
-    (if (or (= pre "ajp") (= pre "http"))
-      (assoc thread :request (into (sorted-map)
-                                   {:time time
-                                    :date (thread-date dump-date time)
-                                    :cid  cid
-                                    :rid  rid
-                                    :oip  oip
-                                    :url  url}))
-      thread)))
+  (if-not (request-thread? (:name thread))
+    thread
+    (let [{:keys [time cid rid oip url]} (parse-thread-name (:name thread))]
+      (assoc thread :request {:time time
+                              :date (thread-date dump-date time)
+                              :cid  cid
+                              :rid  rid
+                              :oip  oip
+                              :url  url}))))
 
 (defn decorate-thread-age [newest-date threads]
   (let [age-secs (fn [t] (seconds-between newest-date (req-date t)))]

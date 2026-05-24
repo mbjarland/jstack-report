@@ -15,7 +15,10 @@
                           :main        jstack-report.main
                           :aot         :all}
              :reflection {:main jstack-report.classes/generate-reflection-file}
-             :test       {:resource-paths ["test/resources"]}}
+             :test       {:resource-paths ["test/resources"]}
+             :bench      {:source-paths   ["dev"]
+                          :jvm-opts       ["-server"]
+                          :global-vars    {*assert* false}}}
   :plugins [[me.arrdem/lein-git-version "2.0.8"]]
   :git-version {:version-file      "gen-resources/build/version.edn"
                 :version-file-keys [:ref :version :timestamp :dirty? :ref-short]}

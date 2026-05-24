@@ -2,7 +2,8 @@
 look-up tables (by tid / by locked oid), wait-for relationships, the
 transitive lock graph, and a handful of trace-content predicates."
       :author "Matias Bjarland"}
-  jstack-report.analyze)
+  jstack-report.analyze
+  (:require [clojure.string :as str]))
 
 (def trace-report-limit
   "Threads with stack traces longer than this many lines are flagged
@@ -124,10 +125,14 @@ transitive lock graph, and a handful of trace-content predicates."
 ;; ---------------------------------------------------------------------------
 ;; Trace-content predicates
 
-(defn trace-has? [t [class method]]
-  (let [match? (fn [e] (and (= (some-> e :details deref :class) class)
-                            (= (some-> e :details deref :method) method)))]
-    (boolean (some match? (:trace t)))))
+(defn trace-has?
+  "True when one of the thread's trace lines names this `class.method`.
+  We string-match on the raw `:line` so we don't have to parse every
+  stack-trace entry up front — the parser is fast enough as is."
+  [t [class method]]
+  (let [needle (str class "." method "(")]
+    (boolean (some #(when-let [l (:line %)] (str/includes? l needle))
+                   (:trace t)))))
 
 (defn tx-reaper? [t]
   (trace-has? t ["com.arjuna.ats.internal.arjuna.coordinator.ReaperWorkerThread"
